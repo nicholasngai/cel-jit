@@ -105,3 +105,93 @@ func TestConformance(t *testing.T) {
 		})
 	}
 }
+
+func BenchmarkCEL(b *testing.B) {
+	for _, test := range tests {
+		b.Run(test.name, func(b *testing.B) {
+			envOpts := make([]cel.EnvOption, 0, len(test.paramNames)+2)
+			envOpts = append(envOpts,
+				cel.EagerlyValidateDeclarations(true),
+				cel.ExtendedValidations(),
+			)
+			for _, paramName := range test.paramNames{
+				envOpts = append(envOpts, cel.Variable(paramName, cel.DynType))
+			}
+			env, err := cel.NewEnv(envOpts...)
+			if err != nil {
+				b.Errorf("Failed to create CEL env: %v", err)
+				return
+			}
+
+			ast, iss := env.Compile(test.expr)
+			if err := iss.Err(); err != nil {
+				b.Errorf("Failed to parse CEL: %v", err)
+				return
+			}
+
+			prog, err := env.Program(ast)
+			if err != nil {
+				b.Errorf("Failed to generate CEL program: %v", err)
+				return
+			}
+
+			celArgs := make(map[string]any, len(test.paramNames))
+			for i, paramName := range test.paramNames {
+				celArgs[paramName] = test.paramValues[i]
+			}
+
+			for b.Loop() {
+				if _, _, err := prog.ContextEval(b.Context(), celArgs); err != nil {
+					b.Errorf("Failed to execute CEL program: %v", err)
+					return
+				}
+			}
+		})
+	}
+}
+
+func BenchmarkJIT(b *testing.B) {
+	for _, test := range tests {
+		b.Run(test.name, func(b *testing.B) {
+			jitParameters := make([]Parameter, 0, len(test.paramNames))
+			for _, paramName := range test.paramNames {
+				jitParameters = append(jitParameters, Parameter{
+					Name: paramName,
+					Type: cel.DynType,
+				})
+			}
+			fAny, err := Compile(test.expr, Config{
+				Parameters: jitParameters,
+			})
+			if err != nil {
+				b.Errorf("Failed to compile JIT: %v", err)
+				return
+			}
+
+			jitArgs := make([]reflect.Value, 0, len(test.paramNames))
+			for _, paramValue := range test.paramValues {
+				jitArgs = append(jitArgs, reflect.ValueOf(paramValue))
+			}
+
+			switch f := fAny.(type) {
+			case func() (any, error):
+				for b.Loop() {
+					if _, err := f(); err != nil {
+						b.Errorf("Failed to execute JIT: %v", err)
+						return
+					}
+				}
+			case func(any, any, any) (any, error):
+				for b.Loop() {
+					if _, err := f(test.paramValues[0], test.paramValues[1], test.paramValues[2]); err != nil {
+						b.Errorf("Failed to execute JIT: %v", err)
+						return
+					}
+				}
+			default:
+				b.Errorf("Unknown JIT function type for benchmarking: %T", fAny)
+				return
+			}
+		})
+	}
+}
