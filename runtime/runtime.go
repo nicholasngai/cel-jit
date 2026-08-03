@@ -21,8 +21,38 @@ func (v Value) Err() error {
 	return v.err
 }
 
+// ValueOf returns a [Value] for the given value.
 func ValueOf(v any) Value {
 	return Value{v: v}
+}
+
+// ValueOfSlice returns a [Value] from a slice of [Value]s. If any value is an
+// error, it returns the first error value instead.
+func ValueOfSlice(s []Value) Value {
+	listVal := make([]any, 0, len(s))
+	for _, val := range s {
+		if val.err != nil {
+			return val
+		}
+		listVal = append(listVal, val.v)
+	}
+	return Value{v: listVal}
+}
+
+// ValueOfMap returns a [Value] from a map of [Value] -> [Value]. If any value
+// is an error, it returns the first error value instead.
+func ValueOfMap(m map[Value]Value) Value {
+	mapVal := make(map[any]any, len(m))
+	for key, val := range m {
+		if key.err != nil {
+			return key
+		}
+		if val.err != nil {
+			return val
+		}
+		mapVal[key.v] = val.v
+	}
+	return Value{v: mapVal}
 }
 
 func errorOf(err error) Value {

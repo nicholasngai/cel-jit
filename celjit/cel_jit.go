@@ -1,6 +1,7 @@
 package celjit
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -166,16 +167,65 @@ func astToGoSource(node *expr.Expr) (string, error) {
 			return fmt.Sprintf("runtime.ValueOf(%q)", constKind.StringValue), nil
 		case *expr.Constant_BytesValue:
 			var builder strings.Builder
-			builder.Grow(len(constKind.BytesValue) * 5) // Max 3 digits + comma + space.
+			builder.WriteString("runtime.ValueOf([]byte{")
 			for i, b := range constKind.BytesValue {
 				if i > 0 {
 					builder.WriteString(", ")
 				}
 				builder.WriteString(strconv.Itoa(int(b)))
 			}
-			return fmt.Sprintf("runtime.ValueOf([]byte{%v})", builder.String()), nil
+			builder.WriteString("})")
+			return builder.String(), nil
+		case *expr.Constant_NullValue:
+			return "runtime.ValueOf(nil)", nil
 		default:
 			return "", fmt.Errorf("unsupported constant kind %q", exprKind.ConstExpr.GetConstantKind())
+		}
+	case *expr.Expr_ListExpr:
+		var builder strings.Builder
+		builder.WriteString("runtime.ValueOfSlice([]runtime.Value{")
+		for i, elem := range exprKind.ListExpr.GetElements() {
+			if i > 0 {
+				builder.WriteString(", ")
+			}
+
+			elemSource, err := astToGoSource(elem)
+			if err != nil {
+				return "", fmt.Errorf("list elem %d: %w", i, err)
+			}
+			builder.WriteString(elemSource)
+		}
+		builder.WriteString("})")
+		return builder.String(), nil
+	case *expr.Expr_StructExpr:
+		if exprKind.StructExpr.MessageName == "" {
+			// Map.
+			var builder strings.Builder
+			builder.WriteString("runtime.ValueOfMap(map[runtime.Value]runtime.Value{")
+			for i, elem := range exprKind.StructExpr.GetEntries() {
+				if i > 0 {
+					builder.WriteString(", ")
+				}
+
+				keySource, err := astToGoSource(elem.GetMapKey())
+				if err != nil {
+					return "", fmt.Errorf("map key %d: %w", i, err)
+				}
+				builder.WriteString(keySource)
+
+				builder.WriteString(": ")
+
+				valSource, err := astToGoSource(elem.GetValue())
+				if err != nil {
+					return "", fmt.Errorf("map value %d: %w", i, err)
+				}
+				builder.WriteString(valSource)
+			}
+			builder.WriteString("})")
+			return builder.String(), nil
+		} else {
+			// Message.
+			return "", errors.New("message literals unsupported")
 		}
 	case *expr.Expr_CallExpr:
 		// Arguments.

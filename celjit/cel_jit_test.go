@@ -19,6 +19,9 @@ var tests = []struct{
 	{"DoubleConst", "1.23", nil, nil},
 	{"StringConst", "\"foobar\"", nil, nil},
 	{"BytesConst", "b\"foobar\"", nil, nil},
+	{"NullLiteral", "null", nil, nil},
+	{"ListLiteral", "[1, 2, 3]", nil, nil},
+	{"MapLiteral", "{\"foo\": 1, \"bar\": 2}", nil, nil},
 }
 
 func TestConformance(t *testing.T) {
@@ -61,7 +64,12 @@ func TestConformance(t *testing.T) {
 				t.Errorf("Failed to execute CEL program: %v", err)
 				return
 			}
-			celResultNative := celResult.Value()
+
+			celResultNative, err := celResult.ConvertToNative(reflect.TypeFor[any]())
+			if err != nil {
+				t.Errorf("Failed to convert CEL result to native: %v", err)
+				return
+			}
 
 			// JIT.
 			jitParameters := make([]Parameter, 0, len(test.paramNames))
@@ -91,8 +99,8 @@ func TestConformance(t *testing.T) {
 			jitResult := resSlice[0].Interface()
 
 			// Compare.
-			if !reflect.DeepEqual(celResultNative, jitResult) {
-				t.Errorf("Results were not the same. CEL produced: %v, type %[1]T; JIT produced: %v, type %[2]T", celResult, jitResult)
+			if !reflect.DeepEqual(celResultNative, jitResult) && !(celResult.Type() == cel.NullType && jitResult == nil) {
+				t.Errorf("Results were not the same. CEL produced: %v, type %[1]T; JIT produced: %v, type %[2]T", celResultNative, jitResult)
 			}
 		})
 	}
