@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"errors"
 	"fmt"
 	"iter"
 	"math"
@@ -60,6 +61,37 @@ func ValueOfMap(entries iter.Seq2[Value, Value], len int) Value {
 
 func errorOf(err error) Value {
 	return Value{err: err}
+}
+
+func Select(a Value, fieldName string) Value {
+	if a.err != nil {
+		return a
+	}
+
+	aVal := reflect.ValueOf(a.v)
+	if aVal.Type().Kind() != reflect.Map {
+		return errorOf(errors.New("not a map"))
+	}
+
+	elemVal := aVal.MapIndex(reflect.ValueOf(fieldName))
+	if !elemVal.IsValid() {
+		return errorOf(fmt.Errorf("no such key %q", fieldName))
+	}
+
+	return ValueOf(elemVal.Interface())
+}
+
+func Has(a Value, fieldName string) Value {
+	if a.err != nil {
+		return a
+	}
+
+	aVal := reflect.ValueOf(a.v)
+	if aVal.Type().Kind() != reflect.Map {
+		return ValueOf(false)
+	}
+
+	return ValueOf(aVal.MapIndex(reflect.ValueOf(fieldName)).IsValid())
 }
 
 func Add(a, b Value) Value {

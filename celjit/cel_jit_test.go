@@ -22,6 +22,14 @@ var tests = []struct{
 	{"NullLiteral", "null", nil, nil},
 	{"ListLiteral", "[1, 2, 3]", nil, nil},
 	{"MapLiteral", "{\"foo\": 1, \"bar\": 2}", nil, nil},
+	{"Select", "{\"foo\": 1}.foo", nil, nil},
+	{"SelectMissing", "{\"foo\": 1}.bar", nil, nil},
+	{"SelectNull", "{\"foo\": null}.foo", nil, nil},
+	{"SelectInvalid", "dyn(1).foo", nil, nil},
+	{"Has", "has({\"foo\": 1}.foo)", nil, nil},
+	{"HasMissing", "has({\"foo\": 1}.bar)", nil, nil},
+	{"HasNull", "has({\"foo\": null}.foo)", nil, nil},
+	{"HasInvalid", "has(dyn(1).bar)", nil, nil},
 	{"Equality", "1 == 1", nil, nil},
 	{"NumericEquality", "1 == dyn(1.0)", nil, nil},
 	{"ListEquality", "[1, 2, 3] == [1, 2, 3]", nil, nil},
@@ -70,16 +78,15 @@ func TestConformance(t *testing.T) {
 				celArgs[paramName] = test.paramValues[i]
 			}
 
-			celResult, _, err := prog.ContextEval(t.Context(), celArgs)
-			if err != nil {
-				t.Errorf("Failed to execute CEL program: %v", err)
-				return
-			}
-
-			celResultNative, err := celResult.ConvertToNative(reflect.TypeFor[any]())
-			if err != nil {
-				t.Errorf("Failed to convert CEL result to native: %v", err)
-				return
+			celResult, _, celErr := prog.ContextEval(t.Context(), celArgs)
+			var celResultNative any
+			if celErr == nil {
+				r, err := celResult.ConvertToNative(reflect.TypeFor[any]())
+				if err != nil {
+					t.Errorf("Failed to convert CEL result to native: %v", err)
+					return
+				}
+				celResultNative = r
 			}
 
 			// JIT.
@@ -103,15 +110,21 @@ func TestConformance(t *testing.T) {
 				jitArgs = append(jitArgs, reflect.ValueOf(paramValue))
 			}
 			resSlice := reflect.ValueOf(fAny).Call(jitArgs)
-			if err, _ := resSlice[1].Interface().(error); err != nil {
-				t.Errorf("Failed to execute JIT: %v", err)
-				return
+			jitErr, _ := resSlice[1].Interface().(error)
+			var jitResult any
+			if jitErr == nil {
+				jitResult = resSlice[0].Interface()
 			}
-			jitResult := resSlice[0].Interface()
 
 			// Compare.
-			if !reflect.DeepEqual(celResultNative, jitResult) && !(celResult.Type() == cel.NullType && jitResult == nil) {
-				t.Errorf("Results were not the same. CEL produced: %v, type %[1]T; JIT produced: %v, type %[2]T", celResultNative, jitResult)
+			if celErr == nil && jitErr == nil {
+				if !reflect.DeepEqual(celResultNative, jitResult) && !(celResult.Type() == cel.NullType && jitResult == nil) {
+					t.Errorf("Results were not the same. CEL produced: %v, type %[1]T; JIT produced: %v, type %[2]T", celResultNative, jitResult)
+				}
+			} else if celErr == nil {
+				t.Errorf("JIT returned an error when CEL did not return an error: %v", jitErr)
+			} else if jitErr == nil {
+				t.Errorf("JIT returned no error when CEL returned an error: %v", celErr)
 			}
 		})
 	}

@@ -233,6 +233,15 @@ func astToGoSource(node *expr.Expr) (string, error) {
 				// Message.
 				return "", errors.New("message literals unsupported")
 			}
+	case *expr.Expr_SelectExpr:
+		operandGo, err := astToGoSource(exprKind.SelectExpr.GetOperand())
+		if err != nil {
+			return "", fmt.Errorf("operand: %w", err)
+		}
+		if exprKind.SelectExpr.TestOnly {
+			return fmt.Sprintf("runtime.Has(%s, %q)", operandGo, exprKind.SelectExpr.GetField()), nil
+		}
+		return fmt.Sprintf("runtime.Select(%s, %q)", operandGo, exprKind.SelectExpr.GetField()), nil
 	case *expr.Expr_CallExpr:
 		// Arguments.
 		argsGo := make([]string, 0, len(exprKind.CallExpr.GetArgs()))
