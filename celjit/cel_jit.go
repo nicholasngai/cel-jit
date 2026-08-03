@@ -70,11 +70,11 @@ func Compile(expr string, config Config) (any, error) {
 	defer os.RemoveAll(tempDir)
 
 	// Write Go module file.
-	if err := writeFile(filepath.Join(tempDir, "go.mod"),
-`module github.com/nicholasngai/cel-jit/compiled
+	if err := writeFile(filepath.Join(tempDir, "go.mod"), fmt.Sprintf(
+`module github.com/nicholasngai/cel-jit/%s
 
 go 1.26
-`); err != nil {
+`, filepath.Base(tempDir))); err != nil {
 		return nil, err
 	}
 
@@ -91,7 +91,7 @@ go 1.26
 `package main
 
 import (
-	"github.com/nicholasngai/cel-jit/compiled/runtime"
+	"github.com/nicholasngai/cel-jit/%s/runtime"
 )
 
 func Program(%s) (any, error) {
@@ -103,6 +103,7 @@ func program(%s) runtime.Value {
 	return %s
 }
 `,
+		filepath.Base(tempDir),
 		repeatParams("%s any", config.Parameters),
 		repeatParams("runtime.ValueOf(%s)", config.Parameters),
 		repeatParams("%s runtime.Value", config.Parameters),
