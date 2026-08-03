@@ -164,7 +164,8 @@ func astToGoSource(node *expr.Expr) (string, error) {
 		switch exprKind.CallExpr.GetFunction() {
 		case operators.Add:
 			return fmt.Sprintf("runtime.Add(%s, %s)", argsGo[0], argsGo[1]), nil
-
+		case operators.Equals:
+			return fmt.Sprintf("runtime.Eq(%s, %s)", argsGo[0], argsGo[1]), nil
 		default:
 			return "", fmt.Errorf("unsupported function %q", exprKind.CallExpr.GetFunction())
 		}

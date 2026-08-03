@@ -9,7 +9,7 @@ import (
 )
 
 func BenchmarkJIT(b *testing.B) {
-	fAny, err := celjit.Compile(`a + b + c`, celjit.Config{
+	fAny, err := celjit.Compile(`a + b == c`, celjit.Config{
 		Parameters: []celjit.Parameter{
 			{
 				Name: "a",
@@ -52,7 +52,7 @@ func BenchmarkInterp(b *testing.B) {
 		return
 	}
 
-	ast, iss := env.Compile(`a + b + c`)
+	ast, iss := env.Compile(`a + b == c`)
 	if err := iss.Err(); err != nil {
 		b.Errorf("Failed to compile CEL expression: %v", err)
 		return
