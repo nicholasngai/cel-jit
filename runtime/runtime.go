@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"fmt"
+	"iter"
 	"math"
 	"reflect"
 	"slices"
@@ -26,31 +27,33 @@ func ValueOf(v any) Value {
 	return Value{v: v}
 }
 
-// ValueOfSlice returns a [Value] from a slice of [Value]s. If any value is an
-// error, it returns the first error value instead.
-func ValueOfSlice(s []Value) Value {
-	listVal := make([]any, 0, len(s))
-	for _, val := range s {
-		if val.err != nil {
-			return val
+// ValueOfSlice returns a [Value] containing a slice from an iterator of
+// [Value]s. If any value is an error, it returns the first error value
+// instead.
+func ValueOfSlice(elems iter.Seq[Value], len int) Value {
+	listVal := make([]any, 0, len)
+	for elem := range elems {
+		if elem.err != nil {
+			return elem
 		}
-		listVal = append(listVal, val.v)
+		listVal = append(listVal, elem.v)
 	}
 	return Value{v: listVal}
 }
 
-// ValueOfMap returns a [Value] from a map of [Value] -> [Value]. If any value
-// is an error, it returns the first error value instead.
-func ValueOfMap(m map[Value]Value) Value {
-	mapVal := make(map[any]any, len(m))
-	for key, val := range m {
+// ValueOfMap returns a [Value] containing a map from an iterator of key-value
+// [Value] pairs. If any value is an error, it returns the first error value
+// instead.
+func ValueOfMap(entries iter.Seq2[Value, Value], len int) Value {
+	mapVal := make(map[any]any, len)
+	for key, value := range entries {
 		if key.err != nil {
 			return key
 		}
-		if val.err != nil {
-			return val
+		if value.err != nil {
+			return value
 		}
-		mapVal[key.v] = val.v
+		mapVal[key.v] = value.v
 	}
 	return Value{v: mapVal}
 }

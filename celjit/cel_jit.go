@@ -183,50 +183,56 @@ func astToGoSource(node *expr.Expr) (string, error) {
 		}
 	case *expr.Expr_ListExpr:
 		var builder strings.Builder
-		builder.WriteString("runtime.ValueOfSlice([]runtime.Value{")
+		builder.WriteString("runtime.ValueOfSlice(func(yield func(v runtime.Value) bool) {")
 		for i, elem := range exprKind.ListExpr.GetElements() {
 			if i > 0 {
-				builder.WriteString(", ")
+				builder.WriteString("; ")
 			}
 
 			elemSource, err := astToGoSource(elem)
 			if err != nil {
 				return "", fmt.Errorf("list elem %d: %w", i, err)
 			}
+			builder.WriteString("if !yield(")
 			builder.WriteString(elemSource)
+			builder.WriteString(") { return }")
 		}
-		builder.WriteString("})")
+		builder.WriteString("}, ")
+		builder.WriteString(strconv.Itoa(len(exprKind.ListExpr.GetElements())))
+		builder.WriteString(")")
 		return builder.String(), nil
 	case *expr.Expr_StructExpr:
 		if exprKind.StructExpr.MessageName == "" {
 			// Map.
 			var builder strings.Builder
-			builder.WriteString("runtime.ValueOfMap(map[runtime.Value]runtime.Value{")
-			for i, elem := range exprKind.StructExpr.GetEntries() {
+			builder.WriteString("runtime.ValueOfMap(func(yield func(key, value runtime.Value) bool) {")
+			for i, entry := range exprKind.StructExpr.GetEntries() {
 				if i > 0 {
-					builder.WriteString(", ")
+					builder.WriteString("; ")
 				}
 
-				keySource, err := astToGoSource(elem.GetMapKey())
+				keySource, err := astToGoSource(entry.GetMapKey())
 				if err != nil {
 					return "", fmt.Errorf("map key %d: %w", i, err)
 				}
-				builder.WriteString(keySource)
-
-				builder.WriteString(": ")
-
-				valSource, err := astToGoSource(elem.GetValue())
+				valSource, err := astToGoSource(entry.GetValue())
 				if err != nil {
 					return "", fmt.Errorf("map value %d: %w", i, err)
 				}
+				builder.WriteString("if !yield(")
+				builder.WriteString(keySource)
+				builder.WriteString(", ")
 				builder.WriteString(valSource)
+				builder.WriteString(") { return }")
 			}
-			builder.WriteString("})")
+			builder.WriteString("}, ")
+			builder.WriteString(strconv.Itoa(len(exprKind.StructExpr.GetEntries())))
+			builder.WriteString(")")
 			return builder.String(), nil
-		} else {
-			// Message.
-			return "", errors.New("message literals unsupported")
-		}
+			} else {
+				// Message.
+				return "", errors.New("message literals unsupported")
+			}
 	case *expr.Expr_CallExpr:
 		// Arguments.
 		argsGo := make([]string, 0, len(exprKind.CallExpr.GetArgs()))
