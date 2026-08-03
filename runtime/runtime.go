@@ -244,39 +244,42 @@ func eq(a, b any) bool {
 			return false
 		}
 
-		if aType.Key() == bType.Key() {
-			// Key types are the same. Iterate through a and select each
-			// element out of b.
-			for aMapIter := aVal.MapRange(); aMapIter.Next(); {
-				bElemVal := bVal.MapIndex(aMapIter.Key())
-				if !bElemVal.IsValid() {
-					return false
-				}
+		for aMapIter := aVal.MapRange(); aMapIter.Next(); {
+			bElemVal := bVal.MapIndex(aMapIter.Key())
+			if bElemVal.IsValid() {
+				// Found the element. Check if it's equal.
 				if !eq(aMapIter.Value().Interface(), bElemVal.Interface()) {
 					return false
 				}
 			}
-		} else {
-			// Key types are not the same. We need to iterate through b each
-			// time to look for the key.
-			for aMapIter := aVal.MapRange(); aMapIter.Next(); {
-				found := false
-				for bMapIter := bVal.MapRange(); bMapIter.Next(); {
-					if !eq(aMapIter.Key().Interface(), bMapIter.Key().Interface()) {
-						continue
-					}
 
-					// Found the element.
-					found = true
-					if !eq(aMapIter.Value().Interface(), bMapIter.Value().Interface()) {
-						return false
-					}
-					break
+			// We didn't find the element. See if we need to do a scan for
+			// numeric comparison. Only int and uints can be keys and
+			// numerically compared.
+			switch aMapIter.Key().Interface().(type) {
+			case int64:
+			case uint64:
+			default:
+				return false
+			}
+
+			// If this is a key type that supports numeric equality, then we
+			// need to iterate through the keys of b.
+			found := false
+			for bMapIter := bVal.MapRange(); bMapIter.Next(); {
+				if !eq(aMapIter.Key().Interface(), bMapIter.Key().Interface()) {
+					continue
 				}
 
-				if !found {
+				// Found the element.
+				found = true
+				if !eq(aMapIter.Value().Interface(), bMapIter.Value().Interface()) {
 					return false
 				}
+				break
+			}
+			if !found {
+				return false
 			}
 		}
 

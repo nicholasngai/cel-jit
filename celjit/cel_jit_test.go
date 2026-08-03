@@ -22,11 +22,22 @@ var tests = []struct{
 	{"NullLiteral", "null", nil, nil},
 	{"ListLiteral", "[1, 2, 3]", nil, nil},
 	{"MapLiteral", "{\"foo\": 1, \"bar\": 2}", nil, nil},
+	{"Equality", "1 == 1", nil, nil},
+	{"NumericEquality", "1 == dyn(1.0)", nil, nil},
+	{"ListEquality", "[1, 2, 3] == [1, 2, 3]", nil, nil},
+	{"ListNumericEquality", "[1, 2, 3] == dyn([1.0, 2.0, 3.0])", nil, nil},
+	{"NestedListEquality", "[[1], [2, 3]] == [[1], [2, 3]]", nil, nil},
+	{"MapEquality", "{1: 2, 3: 4} == {1: 2, 3: 4}", nil, nil},
+	{"MapNumericEquality", "{1: 2, 3: 4} == dyn({1u: 2.0, 3u: 4.0})", nil, nil},
 }
 
 func TestConformance(t *testing.T) {
+	t.Parallel()
+
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
 			// CEL.
 			envOpts := make([]cel.EnvOption, 0, len(test.paramNames)+2)
 			envOpts = append(envOpts,
