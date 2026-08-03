@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"plugin"
+	"strconv"
 	"strings"
 
 	"github.com/google/cel-go/cel"
@@ -151,6 +152,31 @@ func astToGoSource(node *expr.Expr) (string, error) {
 	switch exprKind := node.GetExprKind().(type) {
 	case *expr.Expr_IdentExpr:
 		return exprKind.IdentExpr.GetName(), nil
+	case *expr.Expr_ConstExpr:
+		switch constKind := exprKind.ConstExpr.GetConstantKind().(type) {
+		case *expr.Constant_Int64Value:
+			return fmt.Sprintf("runtime.ValueOf(int64(%d))", constKind.Int64Value), nil
+		case *expr.Constant_Uint64Value:
+			return fmt.Sprintf("runtime.ValueOf(uint64(%d))", constKind.Uint64Value), nil
+		case *expr.Constant_DoubleValue:
+			return fmt.Sprintf("runtime.ValueOf(%f)", constKind.DoubleValue), nil
+		case *expr.Constant_BoolValue:
+			return fmt.Sprintf("runtime.ValueOf(%t)", constKind.BoolValue), nil
+		case *expr.Constant_StringValue:
+			return fmt.Sprintf("runtime.ValueOf(%q)", constKind.StringValue), nil
+		case *expr.Constant_BytesValue:
+			var builder strings.Builder
+			builder.Grow(len(constKind.BytesValue) * 5) // Max 3 digits + comma + space.
+			for i, b := range constKind.BytesValue {
+				if i > 0 {
+					builder.WriteString(", ")
+				}
+				builder.WriteString(strconv.Itoa(int(b)))
+			}
+			return fmt.Sprintf("runtime.ValueOf([]byte{%v})", builder.String()), nil
+		default:
+			return "", fmt.Errorf("unsupported constant kind %q", exprKind.ConstExpr.GetConstantKind())
+		}
 	case *expr.Expr_CallExpr:
 		// Arguments.
 		argsGo := make([]string, 0, len(exprKind.CallExpr.GetArgs()))
