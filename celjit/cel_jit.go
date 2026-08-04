@@ -93,14 +93,14 @@ go 1.26.0
 `package main
 
 import (
-	"errors"
+	"fmt"
 	"reflect"
 
 	"github.com/nicholasngai/cel-jit/%s/runtime"
 )
 
 var (
-	_ = errors.New
+	_ = fmt.Print
 	_ = reflect.ValueOf
 )
 
@@ -270,9 +270,14 @@ func astToGoSource(node *expr.Expr) (string, error) {
 			return "", fmt.Errorf("loop step: %w", err)
 		}
 
-		loopCondGo, err := astToGoSource(exprKind.ComprehensionExpr.GetLoopStep())
+		loopCondGo, err := astToGoSource(exprKind.ComprehensionExpr.GetLoopCondition())
 		if err != nil {
 			return "", fmt.Errorf("loop condition: %w", err)
+		}
+
+		resultGo, err := astToGoSource(exprKind.ComprehensionExpr.GetResult())
+		if err != nil {
+			return "", fmt.Errorf("result: %w", err)
 		}
 
 		return fmt.Sprintf(`(func() runtime.Value {
@@ -290,12 +295,7 @@ func astToGoSource(node *expr.Expr) (string, error) {
 				}
 
 				for i := range collectionVal.Len() {
-					%[6]s := runtime.ValueOf(collectionVal.Index(i).Interface())
-
-					%[2]s = %[4]s
-					if %[2]s.Err() != nil {
-						return %[2]s
-					}
+					%[4]s := runtime.ValueOf(collectionVal.Index(i).Interface())
 
 					cond := %[5]s
 					if cond.Err() != nil {
@@ -304,9 +304,14 @@ func astToGoSource(node *expr.Expr) (string, error) {
 					if cond.Val() != true {
 						break
 					}
+
+					%[2]s = %[6]s
+					if %[2]s.Err() != nil {
+						return %[2]s
+					}
 				}
 
-				return %[2]s
+				return %[7]s
 			case reflect.Map:
 				%[2]s := %[3]s
 				if %[2]s.Err() != nil {
@@ -315,12 +320,7 @@ func astToGoSource(node *expr.Expr) (string, error) {
 
 				mapIter := collectionVal.MapRange()
 				for mapIter.Next() {
-					%[6]s := runtime.ValueOf(mapIter.Key().Interface())
-
-					%[2]s = %[4]s
-					if %[2]s.Err() != nil {
-						return %[2]s
-					}
+					%[4]s := runtime.ValueOf(mapIter.Key().Interface())
 
 					cond := %[5]s
 					if cond.Err() != nil {
@@ -329,13 +329,18 @@ func astToGoSource(node *expr.Expr) (string, error) {
 					if cond.Val() != true {
 						break
 					}
+
+					%[2]s = %[6]s
+					if %[2]s.Err() != nil {
+						return %[2]s
+					}
 				}
 
-				return %[2]s
+				return %[7]s
 			default:
-				return runtime.ErrorOf(errors.New("unsupported comprehension type %T", ))
+				return runtime.ErrorOf(fmt.Errorf("unsupported comprehension type %%T", collectionVal))
 			}
-		})()`, rangeGo, mangleVariable(exprKind.ComprehensionExpr.GetAccuVar()), accumulatorInitGo, loopStepGo, loopCondGo, mangleVariable(exprKind.ComprehensionExpr.GetIterVar())), nil
+		})()`, rangeGo, mangleVariable(exprKind.ComprehensionExpr.GetAccuVar()), accumulatorInitGo, mangleVariable(exprKind.ComprehensionExpr.GetIterVar()), loopCondGo, loopStepGo, resultGo), nil
 	case *expr.Expr_CallExpr:
 		// Arguments.
 		argsGo := make([]string, 0, len(exprKind.CallExpr.GetArgs()))
@@ -348,12 +353,31 @@ func astToGoSource(node *expr.Expr) (string, error) {
 		}
 
 		switch exprKind.CallExpr.GetFunction() {
-		case operators.Add:
-			return fmt.Sprintf("runtime.Add(%s, %s)", argsGo[0], argsGo[1]), nil
-		case operators.Equals:
-			return fmt.Sprintf("runtime.Eq(%s, %s)", argsGo[0], argsGo[1]), nil
+		case operators.Conditional:
+			return fmt.Sprintf(`(func() runtime.Value {
+				cond := %s
+				if cond.Err() != nil {
+					return cond
+				}
+
+				if cond.Val() == true {
+					return %s
+				} else {
+					return %s
+				}
+			})()`, argsGo[0], argsGo[1], argsGo[2]), nil
 		case operators.LogicalAnd:
 			return fmt.Sprintf("runtime.LogicalAnd(%s, %s)", argsGo[0], argsGo[1]), nil
+		case operators.LogicalOr:
+			return fmt.Sprintf("runtime.LogicalOr(%s, %s)", argsGo[0], argsGo[1]), nil
+		case operators.LogicalNot:
+			return fmt.Sprintf("runtime.LogicalNot(%s)", argsGo[0]), nil
+		case operators.Equals:
+			return fmt.Sprintf("runtime.Eq(%s, %s)", argsGo[0], argsGo[1]), nil
+		case operators.Add:
+			return fmt.Sprintf("runtime.Add(%s, %s)", argsGo[0], argsGo[1]), nil
+		case operators.NotStrictlyFalse:
+			return fmt.Sprintf("runtime.NotStrictlyFalse(%s)", argsGo[0]), nil
 		case "dyn":
 			return argsGo[0], nil
 		default:
