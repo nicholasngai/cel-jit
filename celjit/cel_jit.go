@@ -93,7 +93,15 @@ go 1.26
 `package main
 
 import (
+	"errors"
+	"reflect"
+
 	"github.com/nicholasngai/cel-jit/%s/runtime"
+)
+
+var (
+	_ = errors.New
+	_ = reflect.ValueOf
 )
 
 func Program(%s) (any, error) {
@@ -106,9 +114,9 @@ func program(%s) runtime.Value {
 }
 `,
 		filepath.Base(tempDir),
-		repeatParams("%s any", config.Parameters),
-		repeatParams("runtime.ValueOf(%s)", config.Parameters),
-		repeatParams("%s runtime.Value", config.Parameters),
+		repeatParams("%s any", config.Parameters, false),
+		repeatParams("runtime.ValueOf(%s)", config.Parameters, false),
+		repeatParams("%s runtime.Value", config.Parameters, true),
 		goSource,
 	)); err != nil {
 		return nil, err
@@ -138,13 +146,17 @@ func program(%s) runtime.Value {
 	return program, nil
 }
 
-func repeatParams(format string, params []Parameter) string {
+func repeatParams(format string, params []Parameter, mangle bool) string {
 	var builder strings.Builder
 	for i, param := range params {
 		if i > 0 {
 			builder.WriteString(", ")
 		}
-		builder.WriteString(fmt.Sprintf(format, param.Name))
+		if mangle {
+			builder.WriteString(fmt.Sprintf(format, mangleVariable(param.Name)))
+		} else {
+			builder.WriteString(fmt.Sprintf(format, param.Name))
+		}
 	}
 	return builder.String()
 }
@@ -152,7 +164,7 @@ func repeatParams(format string, params []Parameter) string {
 func astToGoSource(node *expr.Expr) (string, error) {
 	switch exprKind := node.GetExprKind().(type) {
 	case *expr.Expr_IdentExpr:
-		return exprKind.IdentExpr.GetName(), nil
+		return mangleVariable(exprKind.IdentExpr.GetName()), nil
 	case *expr.Expr_ConstExpr:
 		switch constKind := exprKind.ConstExpr.GetConstantKind().(type) {
 		case *expr.Constant_Int64Value:
@@ -242,6 +254,88 @@ func astToGoSource(node *expr.Expr) (string, error) {
 			return fmt.Sprintf("runtime.Has(%s, %q)", operandGo, exprKind.SelectExpr.GetField()), nil
 		}
 		return fmt.Sprintf("runtime.Select(%s, %q)", operandGo, exprKind.SelectExpr.GetField()), nil
+	case *expr.Expr_ComprehensionExpr:
+		rangeGo, err := astToGoSource(exprKind.ComprehensionExpr.GetIterRange())
+		if err != nil {
+			return "", fmt.Errorf("range: %w", err)
+		}
+
+		accumulatorInitGo, err := astToGoSource(exprKind.ComprehensionExpr.GetAccuInit())
+		if err != nil {
+			return "", fmt.Errorf("accumulator init: %w", err)
+		}
+
+		loopStepGo, err := astToGoSource(exprKind.ComprehensionExpr.GetLoopStep())
+		if err != nil {
+			return "", fmt.Errorf("loop step: %w", err)
+		}
+
+		loopCondGo, err := astToGoSource(exprKind.ComprehensionExpr.GetLoopStep())
+		if err != nil {
+			return "", fmt.Errorf("loop condition: %w", err)
+		}
+
+		return fmt.Sprintf(`(func() runtime.Value {
+			collection := %[1]s
+			if collection.Err() != nil {
+				return collection
+			}
+
+			collectionVal := reflect.ValueOf(collection.Val())
+			switch collectionVal.Type().Kind() {
+			case reflect.Slice:
+				%[2]s := %[3]s
+				if %[2]s.Err() != nil {
+					return %[2]s
+				}
+
+				for i := range collectionVal.Len() {
+					%[6]s := runtime.ValueOf(collectionVal.Index(i).Interface())
+
+					%[2]s = %[4]s
+					if %[2]s.Err() != nil {
+						return %[2]s
+					}
+
+					cond := %[5]s
+					if cond.Err() != nil {
+						return cond
+					}
+					if cond.Val() != true {
+						break
+					}
+				}
+
+				return %[2]s
+			case reflect.Map:
+				%[2]s := %[3]s
+				if %[2]s.Err() != nil {
+					return %[2]s
+				}
+
+				mapIter := collectionVal.MapRange()
+				for mapIter.Next() {
+					%[6]s := runtime.ValueOf(mapIter.Key().Interface())
+
+					%[2]s = %[4]s
+					if %[2]s.Err() != nil {
+						return %[2]s
+					}
+
+					cond := %[5]s
+					if cond.Err() != nil {
+						return cond
+					}
+					if cond.Val() != true {
+						break
+					}
+				}
+
+				return %[2]s
+			default:
+				return runtime.ErrorOf(errors.New("unsupported comprehension type %T", ))
+			}
+		})()`, rangeGo, mangleVariable(exprKind.ComprehensionExpr.GetAccuVar()), accumulatorInitGo, loopStepGo, loopCondGo, mangleVariable(exprKind.ComprehensionExpr.GetIterVar())), nil
 	case *expr.Expr_CallExpr:
 		// Arguments.
 		argsGo := make([]string, 0, len(exprKind.CallExpr.GetArgs()))
@@ -258,6 +352,8 @@ func astToGoSource(node *expr.Expr) (string, error) {
 			return fmt.Sprintf("runtime.Add(%s, %s)", argsGo[0], argsGo[1]), nil
 		case operators.Equals:
 			return fmt.Sprintf("runtime.Eq(%s, %s)", argsGo[0], argsGo[1]), nil
+		case operators.LogicalAnd:
+			return fmt.Sprintf("runtime.LogicalAnd(%s, %s)", argsGo[0], argsGo[1]), nil
 		case "dyn":
 			return argsGo[0], nil
 		default:
@@ -284,4 +380,13 @@ func writeFile(path string, contents string) error {
 	}
 
 	return nil
+}
+
+func mangleVariable(varName string) string {
+	// These must return distinct prefixes (e.g. we can't do var_ and var_at_).
+	if trimmed, ok := strings.CutPrefix(varName, "@"); ok {
+		return fmt.Sprintf("var_at_%s", trimmed)
+	} else {
+		return fmt.Sprintf("var__%s", varName)
+	}
 }

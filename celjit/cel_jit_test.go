@@ -29,6 +29,7 @@ var tests = []struct{
 	{"Has", "has({\"foo\": 1}.foo)", nil, nil},
 	{"HasMissing", "has({\"foo\": 1}.bar)", nil, nil},
 	{"HasNull", "has({\"foo\": null}.foo)", nil, nil},
+	{"All", "[1, 1, 1].all(x, x == 1)", nil, nil},
 	{"HasInvalid", "has(dyn(1).bar)", nil, nil},
 	{"Equality", "1 == 1", nil, nil},
 	{"NumericEquality", "1 == dyn(1.0)", nil, nil},

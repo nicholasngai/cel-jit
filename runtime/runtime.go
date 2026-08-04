@@ -59,7 +59,7 @@ func ValueOfMap(entries iter.Seq2[Value, Value], len int) Value {
 	return Value{v: mapVal}
 }
 
-func errorOf(err error) Value {
+func ErrorOf(err error) Value {
 	return Value{err: err}
 }
 
@@ -70,12 +70,12 @@ func Select(a Value, fieldName string) Value {
 
 	aVal := reflect.ValueOf(a.v)
 	if aVal.Type().Kind() != reflect.Map {
-		return errorOf(errors.New("not a map"))
+		return ErrorOf(errors.New("not a map"))
 	}
 
 	elemVal := aVal.MapIndex(reflect.ValueOf(fieldName))
 	if !elemVal.IsValid() {
-		return errorOf(fmt.Errorf("no such key %q", fieldName))
+		return ErrorOf(fmt.Errorf("no such key %q", fieldName))
 	}
 
 	return ValueOf(elemVal.Interface())
@@ -163,7 +163,7 @@ func Add(a, b Value) Value {
 		return ValueOf(res)
 	}
 
-	return errorOf(fmt.Errorf("incompatible types %T and %T", a.v, b.v))
+	return ErrorOf(fmt.Errorf("incompatible types %T and %T", a.v, b.v))
 }
 
 func Eq(a, b Value) Value {
@@ -320,4 +320,21 @@ func eq(a, b any) bool {
 
 	// Type equality. == in Go will check for type equality.
 	return a == b
+}
+
+func LogicalAnd(a, b Value) Value {
+	if a.err != nil {
+		return a
+	}
+	if b.err != nil {
+		return b
+	}
+
+	aBool, aOk := a.v.(bool)
+	bBool, bOk := b.v.(bool)
+	if aOk && bOk {
+		return ValueOf(aBool && bBool)
+	}
+
+	return ErrorOf(fmt.Errorf("incompatible types %T and %T", a.v, b.v))
 }
