@@ -114,9 +114,9 @@ func program(%s) runtime.Value {
 }
 `,
 		filepath.Base(tempDir),
-		repeatParams("%s any", config.Parameters, false),
-		repeatParams("runtime.ValueOf(%s)", config.Parameters, false),
-		repeatParams("%s runtime.Value", config.Parameters, true),
+		repeatParams("%s any", config.Parameters, mangleParameter),
+		repeatParams("runtime.ValueOf(%s)", config.Parameters, mangleParameter),
+		repeatParams("%s runtime.Value", config.Parameters, mangleVariable),
 		goSource,
 	)); err != nil {
 		return nil, err
@@ -146,14 +146,14 @@ func program(%s) runtime.Value {
 	return program, nil
 }
 
-func repeatParams(format string, params []Parameter, mangle bool) string {
+func repeatParams(format string, params []Parameter, mangler func(string) string) string {
 	var builder strings.Builder
 	for i, param := range params {
 		if i > 0 {
 			builder.WriteString(", ")
 		}
-		if mangle {
-			builder.WriteString(fmt.Sprintf(format, mangleVariable(param.Name)))
+		if mangler != nil {
+			builder.WriteString(fmt.Sprintf(format, mangler(param.Name)))
 		} else {
 			builder.WriteString(fmt.Sprintf(format, param.Name))
 		}
@@ -426,10 +426,19 @@ func writeFile(path string, contents string) error {
 	return nil
 }
 
+func mangleParameter(varName string) string {
+	// Replace periods.
+	varName = strings.ReplaceAll(varName, "_", "__")
+	varName = strings.ReplaceAll(varName, ".", "_dot_")
+	return varName
+}
+
 func mangleVariable(varName string) string {
-	// These must return distinct prefixes (e.g. we can't do var_ and var_at_).
+	varName = mangleParameter(varName)
+
+	// These must return distinct prefixes.
 	if trimmed, ok := strings.CutPrefix(varName, "@"); ok {
-		return fmt.Sprintf("var_at_%s", trimmed)
+		return fmt.Sprintf("var_at__%s", trimmed)
 	} else {
 		return fmt.Sprintf("var__%s", varName)
 	}

@@ -77,6 +77,8 @@ var tests = []struct{
 	{"Divide", "3 / 2", nil, nil},
 	{"Modulo", "1 % 2", nil, nil},
 	{"Negate", "-(1)", nil, nil},
+	{"Variable", "x + 1", []string{"x"}, []any{int64(1)}},
+	{"VariableWithDot", "x.y + 1", []string{"x.y"}, []any{int64(1)}},
 }
 
 func TestConformance(t *testing.T) {
