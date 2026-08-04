@@ -95,6 +95,14 @@ func Has(a Value, fieldName string) Value {
 }
 
 func LogicalAnd(a, b Value) Value {
+	// Unlike most other operators, logical AND may swallow errors if either
+	// input is false.
+	aBool, aOk := a.v.(bool)
+	bBool, bOk := b.v.(bool)
+	if aOk && !aBool || bOk && !bBool {
+		return ValueOf(false)
+	}
+
 	if a.err != nil {
 		return a
 	}
@@ -102,16 +110,22 @@ func LogicalAnd(a, b Value) Value {
 		return b
 	}
 
-	aBool, aOk := a.v.(bool)
-	bBool, bOk := b.v.(bool)
 	if aOk && bOk {
-		return ValueOf(aBool && bBool)
+		return ValueOf(true)
 	}
 
 	return ErrorOf(fmt.Errorf("incompatible types %T and %T", a.v, b.v))
 }
 
 func LogicalOr(a, b Value) Value {
+	// Unlike most other operators, logical OR may swallow errors if either
+	// input is true.
+	aBool, aOk := a.v.(bool)
+	bBool, bOk := b.v.(bool)
+	if aOk && aBool || bOk && bBool {
+		return ValueOf(true)
+	}
+
 	if a.err != nil {
 		return a
 	}
@@ -119,10 +133,8 @@ func LogicalOr(a, b Value) Value {
 		return b
 	}
 
-	aBool, aOk := a.v.(bool)
-	bBool, bOk := b.v.(bool)
 	if aOk && bOk {
-		return ValueOf(aBool || bBool)
+		return ValueOf(false)
 	}
 
 	return ErrorOf(fmt.Errorf("incompatible types %T and %T", a.v, b.v))
