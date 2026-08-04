@@ -1,6 +1,7 @@
 package celjit
 
 import (
+	"os"
 	"reflect"
 	"testing"
 
@@ -273,4 +274,9 @@ func BenchmarkJIT(b *testing.B) {
 			}
 		})
 	}
+}
+
+func TestMain(m *testing.M) {
+	defer Cleanup()
+	os.Exit(m.Run())
 }
