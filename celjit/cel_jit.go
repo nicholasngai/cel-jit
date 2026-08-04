@@ -396,8 +396,12 @@ func astToGoSource(node *expr.Expr) (string, error) {
 			return fmt.Sprintf("runtime.Modulo(%s, %s)", argsGo[0], argsGo[1]), nil
 		case operators.Negate:
 			return fmt.Sprintf("runtime.Negate(%s)", argsGo[0]), nil
+		case operators.Index:
+			return fmt.Sprintf("runtime.Index(%s, %s)", argsGo[0], argsGo[1]), nil
 		case operators.NotStrictlyFalse:
 			return fmt.Sprintf("runtime.NotStrictlyFalse(%s)", argsGo[0]), nil
+		case operators.In:
+			return fmt.Sprintf("runtime.In(%s, %s)", argsGo[0], argsGo[1]), nil
 		case "dyn":
 			return argsGo[0], nil
 		default:

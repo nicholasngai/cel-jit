@@ -651,10 +651,128 @@ func Negate(a Value) Value {
 	return ErrorOf(fmt.Errorf("incompatible type %T", a.v))
 }
 
+func Index(a, b Value) Value {
+	if a.err != nil {
+		return a
+	}
+	if b.err != nil {
+		return b
+	}
+
+	aVal := reflect.ValueOf(a.v)
+	aType := aVal.Type()
+	switch aType.Kind() {
+	case reflect.Slice:
+		// Turn the numeric value into an integer.
+		var index int
+		switch bVal := b.v.(type) {
+		case int64:
+			index = int(bVal)
+		case uint64:
+			index = int(bVal)
+		case float64:
+			if float64(int(bVal)) != bVal {
+				return ErrorOf(fmt.Errorf("cannot index list with value %f", bVal))
+			}
+			index = int(bVal)
+		default:
+			return ErrorOf(fmt.Errorf("cannot index list with type %T", b.v))
+		}
+
+		// Check bounds.
+		if int(index) < 0 || int(index) >= aVal.Len() {
+			return ErrorOf(fmt.Errorf("index %d out of range", index))
+		}
+
+		return ValueOf(aVal.Index(index).Interface())
+
+	case reflect.Map:
+		bVal := reflect.ValueOf(b.v)
+		if elemVal := aVal.MapIndex(bVal); elemVal.IsValid() {
+			return ValueOf(elemVal.Interface())
+		}
+
+		// We didn't find the element. See if we need to do a scan for numeric
+		// comparison. Only int and uints can be keys and numerically compared.
+		switch b.v.(type) {
+		case int64:
+		case uint64:
+		default:
+			return ErrorOf(fmt.Errorf("no such key %v", bVal))
+		}
+
+		// If this is a key type that supports numeric equality, then we need to
+		// iterate through the keys of b.
+		for aMapIter := aVal.MapRange(); aMapIter.Next(); {
+			if !eq(b.v, aMapIter.Key().Interface()) {
+				continue
+			}
+
+			// Found the element.
+			return ValueOf(aMapIter.Value().Interface())
+		}
+
+		return ErrorOf(fmt.Errorf("no such key %v", bVal))
+	}
+
+	return ErrorOf(fmt.Errorf("incompatible types %T and %T", a.v, b.v))
+}
+
 func NotStrictlyFalse(a Value) Value {
 	if a.err != nil {
 		return a
 	}
 
 	return ValueOf(a.v != false)
+}
+
+func In(a, b Value) Value {
+	if a.err != nil {
+		return a
+	}
+	if b.err != nil {
+		return b
+	}
+
+	aVal := reflect.ValueOf(a.v)
+	bVal := reflect.ValueOf(b.v)
+	bType := bVal.Type()
+	switch bType.Kind() {
+	case reflect.Slice:
+		for i := range bVal.Len() {
+			if eq(a.v, bVal.Index(i).Interface()) {
+				return ValueOf(true)
+			}
+		}
+		return ValueOf(false)
+
+	case reflect.Map:
+		if bVal.MapIndex(aVal).IsValid() {
+			return ValueOf(true)
+		}
+
+		// We didn't find the element. See if we need to do a scan for numeric
+		// comparison. Only int and uints can be keys and numerically compared.
+		switch a.v.(type) {
+		case int64:
+		case uint64:
+		default:
+			return ValueOf(false)
+		}
+
+		// If this is a key type that supports numeric equality, then we need to
+		// iterate through the keys of b.
+		for bMapIter := bVal.MapRange(); bMapIter.Next(); {
+			if !eq(a.v, bMapIter.Key().Interface()) {
+				continue
+			}
+
+			// Found the element.
+			return ValueOf(true)
+		}
+
+		return ValueOf(false)
+	}
+
+	return ErrorOf(fmt.Errorf("incompatible types %T and %T", a.v, b.v))
 }
