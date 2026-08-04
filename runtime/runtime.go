@@ -509,6 +509,148 @@ func Add(a, b Value) Value {
 	return ErrorOf(fmt.Errorf("incompatible types %T and %T", a.v, b.v))
 }
 
+func Subtract(a, b Value) Value {
+	if a.err != nil {
+		return a
+	}
+	if b.err != nil {
+		return b
+	}
+
+	aInt, aOk := a.v.(int64)
+	bInt, bOk := b.v.(int64)
+	if aOk && bOk {
+		return ValueOf(aInt - bInt)
+	}
+
+	aUint, aOk := a.v.(uint64)
+	bUint, bOk := b.v.(uint64)
+	if aOk && bOk {
+		return ValueOf(aUint - bUint)
+	}
+
+	aDouble, aOk := a.v.(float64)
+	bDouble, bOk := b.v.(float64)
+	if aOk && bOk {
+		return ValueOf(aDouble - bDouble)
+	}
+
+	aTime, aIsTime := a.v.(time.Time)
+	bTime, bIsTime := b.v.(time.Time)
+	aDuration, aIsDuration := a.v.(time.Duration)
+	bDuration, bIsDuration := b.v.(time.Duration)
+	if aIsTime && bIsTime {
+		return ValueOf(aTime.Sub(bTime))
+	}
+	if aIsTime && bIsDuration {
+		return ValueOf(aTime.Add(-bDuration))
+	}
+	if aIsDuration && bIsDuration {
+		return ValueOf(aDuration - bDuration)
+	}
+
+	return ErrorOf(fmt.Errorf("incompatible types %T and %T", a.v, b.v))
+}
+
+func Multiply(a, b Value) Value {
+	if a.err != nil {
+		return a
+	}
+	if b.err != nil {
+		return b
+	}
+
+	aInt, aOk := a.v.(int64)
+	bInt, bOk := b.v.(int64)
+	if aOk && bOk {
+		return ValueOf(aInt * bInt)
+	}
+
+	aUint, aOk := a.v.(uint64)
+	bUint, bOk := b.v.(uint64)
+	if aOk && bOk {
+		return ValueOf(aUint * bUint)
+	}
+
+	aDouble, aOk := a.v.(float64)
+	bDouble, bOk := b.v.(float64)
+	if aOk && bOk {
+		return ValueOf(aDouble * bDouble)
+	}
+
+	return ErrorOf(fmt.Errorf("incompatible types %T and %T", a.v, b.v))
+}
+
+func Divide(a, b Value) Value {
+	if a.err != nil {
+		return a
+	}
+	if b.err != nil {
+		return b
+	}
+
+	aInt, aOk := a.v.(int64)
+	bInt, bOk := b.v.(int64)
+	if aOk && bOk {
+		return ValueOf(aInt / bInt)
+	}
+
+	aUint, aOk := a.v.(uint64)
+	bUint, bOk := b.v.(uint64)
+	if aOk && bOk {
+		return ValueOf(aUint / bUint)
+	}
+
+	aDouble, aOk := a.v.(float64)
+	bDouble, bOk := b.v.(float64)
+	if aOk && bOk {
+		return ValueOf(aDouble / bDouble)
+	}
+
+	return ErrorOf(fmt.Errorf("incompatible types %T and %T", a.v, b.v))
+}
+
+func Modulo(a, b Value) Value {
+	if a.err != nil {
+		return a
+	}
+	if b.err != nil {
+		return b
+	}
+
+	aInt, aOk := a.v.(int64)
+	bInt, bOk := b.v.(int64)
+	if aOk && bOk {
+		return ValueOf(aInt % bInt)
+	}
+
+	aUint, aOk := a.v.(uint64)
+	bUint, bOk := b.v.(uint64)
+	if aOk && bOk {
+		return ValueOf(aUint % bUint)
+	}
+
+	return ErrorOf(fmt.Errorf("incompatible types %T and %T", a.v, b.v))
+}
+
+func Negate(a Value) Value {
+	if a.err != nil {
+		return a
+	}
+
+	aInt, ok := a.v.(int64)
+	if ok {
+		return ValueOf(-aInt)
+	}
+
+	aDouble, ok := a.v.(float64)
+	if ok {
+		return ValueOf(-aDouble)
+	}
+
+	return ErrorOf(fmt.Errorf("incompatible type %T", a.v))
+}
+
 func NotStrictlyFalse(a Value) Value {
 	if a.err != nil {
 		return a

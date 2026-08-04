@@ -13,7 +13,6 @@ var tests = []struct{
 	paramNames []string
 	paramValues []any
 }{
-	{"Addition", "a + b + c", []string{"a", "b", "c"}, []any{int64(1), int64(2), int64(3)}},
 	{"IntConst", "123", nil, nil},
 	{"UintConst", "123u", nil, nil},
 	{"DoubleConst", "1.23", nil, nil},
@@ -72,6 +71,12 @@ var tests = []struct{
 	{"LessEquals", "1 <= 2", nil, nil},
 	{"Greater", "1 < 2", nil, nil},
 	{"GreaterEquals", "1 <= 2", nil, nil},
+	{"Add", "1 + 2 + 3", nil, nil},
+	{"Subtract", "1 - 2 - 3", nil, nil},
+	{"Multiply", "1 * 2 * 3", nil, nil},
+	{"Divide", "3 / 2", nil, nil},
+	{"Modulo", "1 % 2", nil, nil},
+	{"Negate", "-(1)", nil, nil},
 }
 
 func TestConformance(t *testing.T) {

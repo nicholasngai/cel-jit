@@ -386,6 +386,16 @@ func astToGoSource(node *expr.Expr) (string, error) {
 			return fmt.Sprintf("runtime.GreaterEquals(%s, %s)", argsGo[0], argsGo[1]), nil
 		case operators.Add:
 			return fmt.Sprintf("runtime.Add(%s, %s)", argsGo[0], argsGo[1]), nil
+		case operators.Subtract:
+			return fmt.Sprintf("runtime.Subtract(%s, %s)", argsGo[0], argsGo[1]), nil
+		case operators.Multiply:
+			return fmt.Sprintf("runtime.Multiply(%s, %s)", argsGo[0], argsGo[1]), nil
+		case operators.Divide:
+			return fmt.Sprintf("runtime.Divide(%s, %s)", argsGo[0], argsGo[1]), nil
+		case operators.Modulo:
+			return fmt.Sprintf("runtime.Modulo(%s, %s)", argsGo[0], argsGo[1]), nil
+		case operators.Negate:
+			return fmt.Sprintf("runtime.Negate(%s)", argsGo[0]), nil
 		case operators.NotStrictlyFalse:
 			return fmt.Sprintf("runtime.NotStrictlyFalse(%s)", argsGo[0]), nil
 		case "dyn":
