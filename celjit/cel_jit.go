@@ -75,7 +75,7 @@ func Compile(expr string, config Config) (any, error) {
 	if err := writeFile(filepath.Join(tempDir, "go.mod"), fmt.Sprintf(
 `module github.com/nicholasngai/cel-jit/%s
 
-go 1.26
+go 1.26.0
 `, filepath.Base(tempDir))); err != nil {
 		return nil, err
 	}
