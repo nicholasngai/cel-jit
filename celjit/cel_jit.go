@@ -373,7 +373,17 @@ func astToGoSource(node *expr.Expr) (string, error) {
 		case operators.LogicalNot:
 			return fmt.Sprintf("runtime.LogicalNot(%s)", argsGo[0]), nil
 		case operators.Equals:
-			return fmt.Sprintf("runtime.Eq(%s, %s)", argsGo[0], argsGo[1]), nil
+			return fmt.Sprintf("runtime.Equals(%s, %s)", argsGo[0], argsGo[1]), nil
+		case operators.NotEquals:
+			return fmt.Sprintf("runtime.NotEquals(%s, %s)", argsGo[0], argsGo[1]), nil
+		case operators.Less:
+			return fmt.Sprintf("runtime.Less(%s, %s)", argsGo[0], argsGo[1]), nil
+		case operators.LessEquals:
+			return fmt.Sprintf("runtime.LessEquals(%s, %s)", argsGo[0], argsGo[1]), nil
+		case operators.Greater:
+			return fmt.Sprintf("runtime.Greater(%s, %s)", argsGo[0], argsGo[1]), nil
+		case operators.GreaterEquals:
+			return fmt.Sprintf("runtime.GreaterEquals(%s, %s)", argsGo[0], argsGo[1]), nil
 		case operators.Add:
 			return fmt.Sprintf("runtime.Add(%s, %s)", argsGo[0], argsGo[1]), nil
 		case operators.NotStrictlyFalse:

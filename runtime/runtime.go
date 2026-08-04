@@ -153,7 +153,7 @@ func LogicalNot(a Value) Value {
 	return ValueOf(!aBool)
 }
 
-func Eq(a, b Value) Value {
+func Equals(a, b Value) Value {
 	if a.err != nil {
 		return a
 	}
@@ -162,6 +162,17 @@ func Eq(a, b Value) Value {
 	}
 
 	return ValueOf(eq(a.v, b.v))
+}
+
+func NotEquals(a, b Value) Value {
+	if a.err != nil {
+		return a
+	}
+	if b.err != nil {
+		return b
+	}
+
+	return ValueOf(!eq(a.v, b.v))
 }
 
 func eq(a, b any) bool {
@@ -307,6 +318,124 @@ func eq(a, b any) bool {
 
 	// Type equality. == in Go will check for type equality.
 	return a == b
+}
+
+func Less(a, b Value) Value {
+	return compare(
+		a, b,
+		func(a, b int64) bool { return a < b },
+		func(a, b uint64) bool { return a < b },
+		func(a, b float64) bool { return a < b },
+		func(a, b bool) bool { return !a && b },
+		func(a, b string) bool { return a < b },
+		func(a, b []byte) bool { return slices.Compare(a, b) < 0 },
+		func(a, b time.Time) bool { return a.Compare(b) < 0 },
+		func(a, b time.Duration) bool { return a < b },
+	)
+}
+
+func LessEquals(a, b Value) Value {
+	return compare(
+		a, b,
+		func(a, b int64) bool { return a <= b },
+		func(a, b uint64) bool { return a <= b },
+		func(a, b float64) bool { return a <= b },
+		func(a, b bool) bool { return !a || b },
+		func(a, b string) bool { return a <= b },
+		func(a, b []byte) bool { return slices.Compare(a, b) <= 0 },
+		func(a, b time.Time) bool { return a.Compare(b) <= 0 },
+		func(a, b time.Duration) bool { return a <= b },
+	)
+}
+
+func Greater(a, b Value) Value {
+	return compare(
+		a, b,
+		func(a, b int64) bool { return a > b },
+		func(a, b uint64) bool { return a > b },
+		func(a, b float64) bool { return a > b },
+		func(a, b bool) bool { return a && !b },
+		func(a, b string) bool { return a > b },
+		func(a, b []byte) bool { return slices.Compare(a, b) > 0 },
+		func(a, b time.Time) bool { return a.Compare(b) > 0 },
+		func(a, b time.Duration) bool { return a > b },
+	)
+}
+
+func GreaterEquals(a, b Value) Value {
+	return compare(
+		a, b,
+		func(a, b int64) bool { return a >= b },
+		func(a, b uint64) bool { return a >= b },
+		func(a, b float64) bool { return a >= b },
+		func(a, b bool) bool { return a || !b },
+		func(a, b string) bool { return a >= b },
+		func(a, b []byte) bool { return slices.Compare(a, b) >= 0 },
+		func(a, b time.Time) bool { return a.Compare(b) >= 0 },
+		func(a, b time.Duration) bool { return a >= b },
+	)
+}
+
+func compare(
+	a, b Value,
+	cmpInt func(a, b int64) bool,
+	cmpUint func(a, b uint64) bool,
+	cmpDouble func(a, b float64) bool,
+	cmpBool func(a, b bool) bool,
+	cmpString func(a, b string) bool,
+	cmpBytes func(a, b []byte) bool,
+	cmpTime func(a, b time.Time) bool,
+	cmpDuration func(a, b time.Duration) bool,
+) Value {
+	if a.err != nil {
+		return a
+	}
+	if b.err != nil {
+		return b
+	}
+
+	aInt, aOk := a.v.(int64)
+	bInt, bOk := b.v.(int64)
+	if aOk && bOk {
+		return ValueOf(cmpInt(aInt, bInt))
+	}
+	aUint, aOk := a.v.(uint64)
+	bUint, bOk := b.v.(uint64)
+	if aOk && bOk {
+		return ValueOf(cmpUint(aUint, bUint))
+	}
+	aDouble, aOk := a.v.(float64)
+	bDouble, bOk := b.v.(float64)
+	if aOk && bOk {
+		return ValueOf(cmpDouble(aDouble, bDouble))
+	}
+	aBool, aOk := a.v.(bool)
+	bBool, bOk := b.v.(bool)
+	if aOk && bOk {
+		return ValueOf(cmpBool(aBool, bBool))
+	}
+	aString, aOk := a.v.(string)
+	bString, bOk := b.v.(string)
+	if aOk && bOk {
+		return ValueOf(cmpString(aString, bString))
+	}
+	aBytes, aOk := a.v.([]byte)
+	bBytes, bOk := b.v.([]byte)
+	if aOk && bOk {
+		return ValueOf(cmpBytes(aBytes, bBytes))
+	}
+	aTime, aOk := a.v.(time.Time)
+	bTime, bOk := b.v.(time.Time)
+	if aOk && bOk {
+		return ValueOf(cmpTime(aTime, bTime))
+	}
+	aDuration, aOk := a.v.(time.Duration)
+	bDuration, bOk := b.v.(time.Duration)
+	if aOk && bOk {
+		return ValueOf(cmpDuration(aDuration, bDuration))
+	}
+
+	return ErrorOf(fmt.Errorf("incompatible types %T and %T", a.v, b.v))
 }
 
 func Add(a, b Value) Value {
