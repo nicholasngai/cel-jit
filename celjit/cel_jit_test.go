@@ -331,6 +331,14 @@ func BenchmarkJIT(b *testing.B) {
 				for b.Loop() {
 					_, _ = f()
 				}
+			case func(any) (any, error):
+				for b.Loop() {
+					_, _ = f(test.paramValues[0])
+				}
+			case func(any, any) (any, error):
+				for b.Loop() {
+					_, _ = f(test.paramValues[0], test.paramValues[1])
+				}
 			case func(any, any, any) (any, error):
 				for b.Loop() {
 					_, _ = f(test.paramValues[0], test.paramValues[1], test.paramValues[2])
