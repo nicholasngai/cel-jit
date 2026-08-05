@@ -179,7 +179,14 @@ var tests = []struct{
 func TestConformance(t *testing.T) {
 	t.Parallel()
 
-	for _, test := range tests {
+	// Compile JIT.
+	jitFuncs, err := compileJITTests()
+	if err != nil {
+		t.Errorf("Failed to compile JIT: %v", err)
+		return
+	}
+
+	for i, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -227,6 +234,7 @@ func TestConformance(t *testing.T) {
 			}
 
 			// JIT.
+			jitFunc := jitFuncs[i]
 			jitParameters := make([]Parameter, 0, len(test.paramNames))
 			for _, paramName := range test.paramNames {
 				jitParameters = append(jitParameters, Parameter{
@@ -234,19 +242,12 @@ func TestConformance(t *testing.T) {
 					Type: cel.DynType,
 				})
 			}
-			fAny, err := Compile(test.expr, Config{
-				Parameters: jitParameters,
-			})
-			if err != nil {
-				t.Errorf("Failed to compile JIT: %v", err)
-				return
-			}
 
 			jitArgs := make([]reflect.Value, 0, len(test.paramNames))
 			for _, paramValue := range test.paramValues {
 				jitArgs = append(jitArgs, reflect.ValueOf(paramValue))
 			}
-			resSlice := reflect.ValueOf(fAny).Call(jitArgs)
+			resSlice := reflect.ValueOf(jitFunc).Call(jitArgs)
 			jitErr, _ := resSlice[1].Interface().(error)
 			var jitResult any
 			if jitErr == nil {
@@ -312,29 +313,23 @@ func BenchmarkCEL(b *testing.B) {
 }
 
 func BenchmarkJIT(b *testing.B) {
-	for _, test := range tests {
+	// Compile JIT.
+	jitFuncs, err := compileJITTests()
+	if err != nil {
+		b.Errorf("Failed to compile JIT: %v", err)
+		return
+	}
+
+	for i, test := range tests {
 		b.Run(test.name, func(b *testing.B) {
-			jitParameters := make([]Parameter, 0, len(test.paramNames))
-			for _, paramName := range test.paramNames {
-				jitParameters = append(jitParameters, Parameter{
-					Name: paramName,
-					Type: cel.DynType,
-				})
-			}
-			fAny, err := Compile(test.expr, Config{
-				Parameters: jitParameters,
-			})
-			if err != nil {
-				b.Errorf("Failed to compile JIT: %v", err)
-				return
-			}
+			jitFunc := jitFuncs[i]
 
 			jitArgs := make([]reflect.Value, 0, len(test.paramNames))
 			for _, paramValue := range test.paramValues {
 				jitArgs = append(jitArgs, reflect.ValueOf(paramValue))
 			}
 
-			switch f := fAny.(type) {
+			switch f := jitFunc.(type) {
 			case func() (any, error):
 				for b.Loop() {
 					if _, err := f(); err != nil {
@@ -350,11 +345,32 @@ func BenchmarkJIT(b *testing.B) {
 					}
 				}
 			default:
-				b.Errorf("Unknown JIT function type for benchmarking: %T", fAny)
+				b.Errorf("Unknown JIT function type for benchmarking: %T", jitFunc)
 				return
 			}
 		})
 	}
+}
+
+func compileJITTests() ([]any, error) {
+	// Compile JIT.
+	exprConfigs := make([]ExprConfig, 0, len(tests))
+	for _, test := range tests {
+		params := make([]Parameter, 0, len(test.paramNames))
+		for _, paramName := range test.paramNames {
+			params = append(params, Parameter{
+				Name: paramName,
+				Type: cel.DynType,
+			})
+		}
+		exprConfigs = append(exprConfigs, ExprConfig{
+			Expr: test.expr,
+			Parameters: params,
+		})
+	}
+	return Compile(Config{
+		Exprs: exprConfigs,
+	})
 }
 
 func TestMain(m *testing.M) {

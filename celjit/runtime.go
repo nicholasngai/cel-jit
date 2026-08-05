@@ -19,7 +19,7 @@ var writeRuntime = sync.OnceValues(func() (string, error) {
 	}
 
 	// Write Go module file.
-	if err := writeFile(filepath.Join(dir, "go.mod"),
+	if err := writeFilef(filepath.Join(dir, "go.mod"),
 `module github.com/nicholasngai/cel-jit/runtime-source/runtime
 
 go 1.26.0
@@ -31,7 +31,7 @@ go 1.26.0
 	if err := os.MkdirAll(filepath.Join(dir, "runtime"), 0o755); err != nil {
 		return "", fmt.Errorf("mkdir runtime: %w", err)
 	}
-	if err := writeFile(filepath.Join(dir, "runtime.go"), runtime.Source); err != nil {
+	if err := writeFilef(filepath.Join(dir, "runtime.go"), "%s", runtime.Source); err != nil {
 		return "", err
 	}
 
