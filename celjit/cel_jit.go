@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"plugin"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -125,8 +126,17 @@ func program(%s) runtime.Value {
 	}
 
 	// Compile it.
+	gcFlags := ""
+	if buildInfo, ok := debug.ReadBuildInfo(); ok {
+		for _, setting := range buildInfo.Settings {
+			if setting.Key == "-gcflags" {
+				gcFlags = setting.Value
+			}
+		}
+	}
 	cmd := exec.Command("go", "build",
 		"-C", tempDir,
+		fmt.Sprintf("-gcflags=%s", gcFlags),
 		"-buildmode=plugin",
 		"-o", "program.so",
 		"program.go",
