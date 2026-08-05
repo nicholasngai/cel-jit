@@ -315,6 +315,7 @@ func BenchmarkJIT(b *testing.B) {
 }
 
 func TestMain(m *testing.M) {
-	defer Cleanup()
-	os.Exit(m.Run())
+	exitCode := m.Run()
+	Cleanup()
+	os.Exit(exitCode)
 }
