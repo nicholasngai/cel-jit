@@ -186,9 +186,9 @@ func repeatParams(format string, params []Parameter, mangler func(string) string
 			builder.WriteString(", ")
 		}
 		if mangler != nil {
-			builder.WriteString(fmt.Sprintf(format, mangler(param.Name)))
+			fmt.Fprintf(&builder, format, mangler(param.Name))
 		} else {
-			builder.WriteString(fmt.Sprintf(format, param.Name))
+			fmt.Fprintf(&builder, format, param.Name)
 		}
 	}
 	return builder.String()
