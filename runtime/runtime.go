@@ -6,7 +6,9 @@ import (
 	"iter"
 	"math"
 	"reflect"
+	"regexp"
 	"slices"
+	"strings"
 	"time"
 )
 
@@ -62,6 +64,10 @@ func ValueOfMap(entries iter.Seq2[Value, Value], len int) Value {
 func ErrorOf(err error) Value {
 	return Value{err: err}
 }
+
+//
+// OPERATORS.
+//
 
 func Select(a Value, fieldName string) Value {
 	if a.err != nil {
@@ -775,4 +781,231 @@ func In(a, b Value) Value {
 	}
 
 	return ErrorOf(fmt.Errorf("incompatible types %T and %T", a.v, b.v))
+}
+
+//
+// OVERLOADS.
+//
+
+func Size(a Value) Value {
+	if a.err != nil {
+		return a
+	}
+
+	switch a := a.v.(type) {
+	case string:
+		return ValueOf(int64(len(a)))
+	case []byte:
+		return ValueOf(int64(len(a)))
+	}
+
+	aVal := reflect.ValueOf(a.v)
+	switch aVal.Type().Kind() {
+	case reflect.Slice:
+		return ValueOf(int64(aVal.Len()))
+	case reflect.Map:
+		return ValueOf(int64(aVal.Len()))
+	}
+
+	return ErrorOf(fmt.Errorf("incompatible type %T", a.v))
+}
+
+func Contains(a, b Value) Value {
+	return eval2(a, b, strings.Contains)
+}
+
+func EndsWith(a, b Value) Value {
+	return eval2(a, b, strings.HasSuffix)
+}
+
+func Matches(a, b Value) Value {
+	if a.err != nil {
+		return a
+	}
+	if b.err != nil {
+		return b
+	}
+
+	aStr, aOk := a.v.(string)
+	bStr, bOk := b.v.(string)
+	if aOk && bOk {
+		// TODO(nngai) Can we pre-compile this somehow?
+		re, err := regexp.Compile(bStr)
+		if err != nil {
+			return ErrorOf(fmt.Errorf("invalid regex %q: %w", bStr, err))
+		}
+		return ValueOf(re.MatchString(aStr))
+	}
+
+	return ErrorOf(fmt.Errorf("incompatible types %T and %T", a.v, b.v))
+}
+
+func StartsWith(a, b Value) Value {
+	return eval2(a, b, strings.HasPrefix)
+}
+
+func eval2[T any, U any, R any](a, b Value, eval func(a T, b U) R) Value {
+	if a.err != nil {
+		return a
+	}
+	if b.err != nil {
+		return b
+	}
+
+	aStr, aOk := a.v.(T)
+	bStr, bOk := b.v.(U)
+	if aOk && bOk {
+		return ValueOf(eval(aStr, bStr))
+	}
+
+	return ErrorOf(fmt.Errorf("incompatible types %T and %T", a.v, b.v))
+}
+
+func GetFullYear(a, b Value) Value {
+	return evalTime(a, b, time.Time.Year)
+}
+
+func GetMonth(a, b Value) Value {
+	return evalTime(a, b, func(a time.Time) time.Month { return a.Month() - 1 })
+}
+
+func GetDayOfYear(a, b Value) Value {
+	return evalTime(a, b, func (a time.Time) int { return a.YearDay() - 1 })
+}
+
+func GetDate(a, b Value) Value {
+	return evalTime(a, b, time.Time.Day)
+}
+
+func GetDayOfMonth(a, b Value) Value {
+	return evalTime(a, b, func (a time.Time) int { return a.Day() - 1 })
+}
+
+func GetDayOfWeek(a, b Value) Value {
+	return evalTime(a, b, time.Time.Weekday)
+}
+
+func evalTime[T ~int](a, b Value, eval func(a time.Time) T) Value {
+	if a.err != nil {
+		return a
+	}
+	if b.err != nil {
+		return b
+	}
+
+	switch a := a.v.(type) {
+	case time.Time:
+		switch b := b.v.(type) {
+		case string:
+			loc, err := time.LoadLocation(b)
+			if err != nil {
+				return ErrorOf(fmt.Errorf("unknown location %q", b))
+			}
+			return ValueOf(int64(eval(a.In(loc))))
+		case nil:
+			return ValueOf(int64(eval(a.UTC())))
+		}
+	}
+
+	return ErrorOf(fmt.Errorf("incompatible types %T and %T", a.v, b.v))
+}
+
+func GetHours(a, b Value) Value {
+	return evalTimeOrDuration(
+		a, b,
+		time.Time.Hour,
+		func(a time.Duration) int64 { return int64(a / time.Hour) },
+	)
+}
+
+func GetMinutes(a, b Value) Value {
+	return evalTimeOrDuration(
+		a, b,
+		time.Time.Minute,
+		func(a time.Duration) int64 { return int64(a / time.Minute) },
+	)
+}
+
+func GetSeconds(a, b Value) Value {
+	return evalTimeOrDuration(
+		a, b,
+		time.Time.Second,
+		func(a time.Duration) int64 { return int64(a / time.Second) },
+	)
+}
+
+func GetMilliseconds(a, b Value) Value {
+	return evalTimeOrDuration(
+		a, b,
+		func(a time.Time) int { return a.Nanosecond() / 1000000 },
+		func(a time.Duration) int64 { return a.Milliseconds() % 1000 },
+	)
+}
+
+func evalTimeOrDuration[T ~int, U ~int64](a, b Value, evalTime func(a time.Time) T, evalDuration func(a time.Duration) U) Value {
+	if a.err != nil {
+		return a
+	}
+	if b.err != nil {
+		return b
+	}
+
+	switch a := a.v.(type) {
+	case time.Time:
+		switch b := b.v.(type) {
+		case string:
+			loc, err := time.LoadLocation(b)
+			if err != nil {
+				return ErrorOf(fmt.Errorf("unknown location %q", b))
+			}
+			return ValueOf(int64(evalTime(a.In(loc))))
+		case nil:
+			return ValueOf(int64(evalTime(a.UTC())))
+		}
+	case time.Duration:
+		switch b.v.(type) {
+		case nil:
+			return ValueOf(int64(evalDuration(a)))
+		}
+	}
+
+	return ErrorOf(fmt.Errorf("incompatible types %T and %T", a.v, b.v))
+}
+
+//
+// TYPE CONVERSION.
+//
+
+func Timestamp(a Value) Value {
+	if a.err != nil {
+		return a
+	}
+
+	switch a := a.v.(type) {
+	case string:
+		t, err := time.Parse(time.RFC3339, a)
+		if err != nil {
+			return ErrorOf(fmt.Errorf("invalid timestamp %q: %w", a, err))
+		}
+		return ValueOf(t)
+	}
+
+	return ErrorOf(fmt.Errorf("incompatible type %T", a.v))
+}
+
+func Duration(a Value) Value {
+	if a.err != nil {
+		return a
+	}
+
+	switch a := a.v.(type) {
+	case string:
+		d, err := time.ParseDuration(a)
+		if err != nil {
+			return ErrorOf(fmt.Errorf("invalid duration %q: %w", a, err))
+		}
+		return ValueOf(d)
+	}
+
+	return ErrorOf(fmt.Errorf("incompatible type %T", a.v))
 }

@@ -385,6 +385,52 @@ func astToGoSource(node *expr.Expr) (string, error) {
 			argsGo = append(argsGo, argGo)
 		}
 
+		if exprKind.CallExpr.GetTarget() != nil {
+			targetGo, err := astToGoSource(exprKind.CallExpr.GetTarget())
+			if err != nil {
+				return "", fmt.Errorf("target: %w", err)
+			}
+
+			maybeArgGo0 := "runtime.Value{}"
+			if len(argsGo) >= 1 {
+				maybeArgGo0 = argsGo[0]
+			}
+			switch exprKind.CallExpr.GetFunction() {
+			case "size":
+				return fmt.Sprintf("runtime.Size(%s)", targetGo), nil
+			case "contains":
+				return fmt.Sprintf("runtime.Contains(%s, %s)", targetGo, argsGo[0]), nil
+			case "endsWith":
+				return fmt.Sprintf("runtime.EndsWith(%s, %s)", targetGo, argsGo[0]), nil
+			case "matches":
+				return fmt.Sprintf("runtime.Matches(%s, %s)", targetGo, argsGo[0]), nil
+			case "startsWith":
+				return fmt.Sprintf("runtime.StartsWith(%s, %s)", targetGo, argsGo[0]), nil
+			case "getFullYear":
+				return fmt.Sprintf("runtime.GetFullYear(%s, %s)", targetGo, maybeArgGo0), nil
+			case "getMonth":
+				return fmt.Sprintf("runtime.GetMonth(%s, %s)", targetGo, maybeArgGo0), nil
+			case "getDayOfYear":
+				return fmt.Sprintf("runtime.GetDayOfYear(%s, %s)", targetGo, maybeArgGo0), nil
+			case "getDate":
+				return fmt.Sprintf("runtime.GetDate(%s, %s)", targetGo, maybeArgGo0), nil
+			case "getDayOfMonth":
+				return fmt.Sprintf("runtime.GetDayOfMonth(%s, %s)", targetGo, maybeArgGo0), nil
+			case "getDayOfWeek":
+				return fmt.Sprintf("runtime.GetDayOfWeek(%s, %s)", targetGo, maybeArgGo0), nil
+			case "getHours":
+				return fmt.Sprintf("runtime.GetHours(%s, %s)", targetGo, maybeArgGo0), nil
+			case "getMinutes":
+				return fmt.Sprintf("runtime.GetMinutes(%s, %s)", targetGo, maybeArgGo0), nil
+			case "getSeconds":
+				return fmt.Sprintf("runtime.GetSeconds(%s, %s)", targetGo, maybeArgGo0), nil
+			case "getMilliseconds":
+				return fmt.Sprintf("runtime.GetMilliseconds(%s, %s)", targetGo, maybeArgGo0), nil
+			default:
+				return "", fmt.Errorf("unsupported overload %q", exprKind.CallExpr.GetFunction())
+			}
+		}
+
 		switch exprKind.CallExpr.GetFunction() {
 		case operators.Conditional:
 			return fmt.Sprintf(`(func() runtime.Value {
@@ -435,6 +481,14 @@ func astToGoSource(node *expr.Expr) (string, error) {
 			return fmt.Sprintf("runtime.NotStrictlyFalse(%s)", argsGo[0]), nil
 		case operators.In:
 			return fmt.Sprintf("runtime.In(%s, %s)", argsGo[0], argsGo[1]), nil
+		case "size":
+			return fmt.Sprintf("runtime.Size(%s)", argsGo[0]), nil
+		case "matches":
+			return fmt.Sprintf("runtime.Matches(%s, %s)", argsGo[0], argsGo[1]), nil
+		case "timestamp":
+			return fmt.Sprintf("runtime.Timestamp(%s)", argsGo[0]), nil
+		case "duration":
+			return fmt.Sprintf("runtime.Duration(%s)", argsGo[0]), nil
 		case "dyn":
 			return argsGo[0], nil
 		default:
