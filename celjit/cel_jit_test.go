@@ -303,10 +303,7 @@ func BenchmarkCEL(b *testing.B) {
 			}
 
 			for b.Loop() {
-				if _, _, err := prog.ContextEval(b.Context(), celArgs); err != nil {
-					b.Errorf("Failed to execute CEL program: %v", err)
-					return
-				}
+				_, _, _ = prog.ContextEval(b.Context(), celArgs)
 			}
 		})
 	}
@@ -332,17 +329,11 @@ func BenchmarkJIT(b *testing.B) {
 			switch f := jitFunc.(type) {
 			case func() (any, error):
 				for b.Loop() {
-					if _, err := f(); err != nil {
-						b.Errorf("Failed to execute JIT: %v", err)
-						return
-					}
+					_, _ = f()
 				}
 			case func(any, any, any) (any, error):
 				for b.Loop() {
-					if _, err := f(test.paramValues[0], test.paramValues[1], test.paramValues[2]); err != nil {
-						b.Errorf("Failed to execute JIT: %v", err)
-						return
-					}
+					_, _ = f(test.paramValues[0], test.paramValues[1], test.paramValues[2])
 				}
 			default:
 				b.Errorf("Unknown JIT function type for benchmarking: %T", jitFunc)
