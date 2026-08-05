@@ -497,6 +497,18 @@ func astToGoSource(node *expr.Expr) (string, error) {
 			return fmt.Sprintf("runtime.Size(%s)", argsGo[0]), nil
 		case "matches":
 			return fmt.Sprintf("runtime.Matches(%s, %s)", argsGo[0], argsGo[1]), nil
+		case "int":
+			return fmt.Sprintf("runtime.Int(%s)", argsGo[0]), nil
+		case "uint":
+			return fmt.Sprintf("runtime.Uint(%s)", argsGo[0]), nil
+		case "double":
+			return fmt.Sprintf("runtime.Double(%s)", argsGo[0]), nil
+		case "bool":
+			return fmt.Sprintf("runtime.Bool(%s)", argsGo[0]), nil
+		case "string":
+			return fmt.Sprintf("runtime.String(%s)", argsGo[0]), nil
+		case "bytes":
+			return fmt.Sprintf("runtime.Bytes(%s)", argsGo[0]), nil
 		case "timestamp":
 			return fmt.Sprintf("runtime.Timestamp(%s)", argsGo[0]), nil
 		case "duration":

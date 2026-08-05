@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -976,16 +977,166 @@ func evalTimeOrDuration[T ~int, U ~int64](a, b Value, evalTime func(a time.Time)
 // TYPE CONVERSION.
 //
 
+func Int(a Value) Value {
+	if a.err != nil {
+		return a
+	}
+
+	switch aType := a.v.(type) {
+	case int64:
+		return a
+	case uint64:
+		if aType > uint64(math.MaxInt64) {
+			return ErrorOf(fmt.Errorf("integer overflow %d", aType))
+		}
+		return ValueOf(int64(aType))
+	case float64:
+		if aType > float64(math.MaxInt64) || aType < float64(math.MinInt64) {
+			return ErrorOf(fmt.Errorf("integer overflow %f", aType))
+		}
+		return ValueOf(int64(aType))
+	case time.Time:
+		return ValueOf(aType.Unix())
+	case string:
+		i, err := strconv.ParseInt(aType, 10, 64)
+		if err != nil {
+			return ErrorOf(fmt.Errorf("invalid int %q: %w", aType, err))
+		}
+		return ValueOf(i)
+	}
+
+	return ErrorOf(fmt.Errorf("incompatible type %T", a.v))
+}
+
+func Uint(a Value) Value {
+	if a.err != nil {
+		return a
+	}
+
+	switch aType := a.v.(type) {
+	case uint64:
+		return a
+	case int64:
+		if aType < 0 {
+			return ErrorOf(fmt.Errorf("unsigned integer overflow %d", aType))
+		}
+		return ValueOf(uint64(aType))
+	case float64:
+		if aType > float64(math.MaxUint64) || aType < 0 {
+			return ErrorOf(fmt.Errorf("unsigned integer overflow %f", aType))
+		}
+		return ValueOf(uint64(aType))
+	case string:
+		i, err := strconv.ParseUint(aType, 10, 64)
+		if err != nil {
+			return ErrorOf(fmt.Errorf("invalid uint %q: %w", aType, err))
+		}
+		return ValueOf(i)
+	}
+
+	return ErrorOf(fmt.Errorf("incompatible type %T", a.v))
+}
+
+func Double(a Value) Value {
+	if a.err != nil {
+		return a
+	}
+
+	switch aType := a.v.(type) {
+	case float64:
+		return a
+	case int64:
+		return ValueOf(float64(aType))
+	case uint64:
+		return ValueOf(float64(aType))
+	case string:
+		f, err := strconv.ParseFloat(aType, 10)
+		if err != nil {
+			return ErrorOf(fmt.Errorf("invalid float %q: %w", aType, err))
+		}
+		return ValueOf(f)
+	}
+
+	return ErrorOf(fmt.Errorf("incompatible type %T", a.v))
+}
+
+func Bool(a Value) Value {
+	if a.err != nil {
+		return a
+	}
+
+	switch aType := a.v.(type) {
+	case bool:
+		return a
+	case string:
+		b, err := strconv.ParseBool(aType)
+		if err != nil {
+			return ErrorOf(fmt.Errorf("invalid bool %q: %w", aType, err))
+		}
+		return ValueOf(b)
+	}
+
+	return ErrorOf(fmt.Errorf("incompatible type %T", a.v))
+}
+
+func String(a Value) Value {
+	if a.err != nil {
+		return a
+	}
+
+	switch aType := a.v.(type) {
+	case string:
+		return a
+	case int64:
+		return ValueOf(strconv.FormatInt(aType, 10))
+	case uint64:
+		return ValueOf(strconv.FormatUint(aType, 10))
+	case float64:
+		return ValueOf(strconv.FormatFloat(aType, 'g', -1, 64))
+	case bool:
+		return ValueOf(strconv.FormatBool(aType))
+	case []byte:
+		return ValueOf(string(aType))
+	case time.Time:
+		return ValueOf(aType.Format(time.RFC3339Nano))
+	case time.Duration:
+		if aType % time.Second == 0 {
+			return ValueOf(fmt.Sprintf("%ds", int64(aType / time.Second)))
+		} else {
+			return ValueOf(fmt.Sprintf("%ss", strconv.FormatFloat(aType.Seconds(), 'f', -1, 64)))
+		}
+	}
+
+	return ErrorOf(fmt.Errorf("incompatible type %T", a.v))
+}
+
+func Bytes(a Value) Value {
+	if a.err != nil {
+		return a
+	}
+
+	switch aType := a.v.(type) {
+	case []byte:
+		return a
+	case string:
+		return ValueOf([]byte(aType))
+	}
+
+	return ErrorOf(fmt.Errorf("incompatible type %T", a.v))
+}
+
 func Timestamp(a Value) Value {
 	if a.err != nil {
 		return a
 	}
 
-	switch a := a.v.(type) {
+	switch aType := a.v.(type) {
+	case time.Time:
+		return a
 	case string:
-		t, err := time.Parse(time.RFC3339, a)
+		t, err := time.Parse(time.RFC3339Nano, aType)
 		if err != nil {
-			return ErrorOf(fmt.Errorf("invalid timestamp %q: %w", a, err))
+			return ErrorOf(fmt.Errorf("invalid timestamp %q: %w", aType, err))
 		}
 		return ValueOf(t)
 	}
@@ -998,11 +1149,13 @@ func Duration(a Value) Value {
 		return a
 	}
 
-	switch a := a.v.(type) {
+	switch aType := a.v.(type) {
+	case time.Duration:
+		return a
 	case string:
-		d, err := time.ParseDuration(a)
+		d, err := time.ParseDuration(aType)
 		if err != nil {
-			return ErrorOf(fmt.Errorf("invalid duration %q: %w", a, err))
+			return ErrorOf(fmt.Errorf("invalid duration %q: %w", aType, err))
 		}
 		return ValueOf(d)
 	}
