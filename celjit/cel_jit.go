@@ -125,22 +125,24 @@ func program(%s) runtime.Value {
 		return nil, err
 	}
 
-	// Compile it.
-	gcFlags := ""
+	// Compile it. Use the same build args as the currently running binary, other than -buildmode.
+	goArgs := []string{
+		"build",
+		"-C", tempDir,
+		"-buildmode=plugin",
+	}
 	if buildInfo, ok := debug.ReadBuildInfo(); ok {
 		for _, setting := range buildInfo.Settings {
-			if setting.Key == "-gcflags" {
-				gcFlags = setting.Value
+			if strings.HasPrefix(setting.Key, "-") && setting.Key != "-buildmode" {
+				goArgs = append(goArgs, fmt.Sprintf("%s=%s", setting.Key, setting.Value))
 			}
 		}
 	}
-	cmd := exec.Command("go", "build",
-		"-C", tempDir,
-		fmt.Sprintf("-gcflags=%s", gcFlags),
-		"-buildmode=plugin",
+	goArgs = append(goArgs,
 		"-o", "program.so",
 		"program.go",
 	)
+	cmd := exec.Command("go", goArgs...)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return nil, fmt.Errorf("go build program.go: %w\n\n%s", err, string(output))
 	}
