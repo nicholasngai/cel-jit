@@ -17,7 +17,7 @@ func astToGoSource(node *expr.Expr) (string, error) {
 	case *expr.Expr_ConstExpr:
 		switch constKind := exprKind.ConstExpr.GetConstantKind().(type) {
 		case *expr.Constant_Int64Value:
-			return fmt.Sprintf("runtime.DynValueOf(int64(%d))", constKind.Int64Value), nil
+			return fmt.Sprintf("runtime.IntValueOf(int64(%d))", constKind.Int64Value), nil
 		case *expr.Constant_Uint64Value:
 			return fmt.Sprintf("runtime.DynValueOf(uint64(%d))", constKind.Uint64Value), nil
 		case *expr.Constant_DoubleValue:
@@ -56,6 +56,7 @@ func astToGoSource(node *expr.Expr) (string, error) {
 			}
 			builder.WriteString("if !yield(")
 			builder.WriteString(elemSource)
+			builder.WriteString(".DynValue()")
 			builder.WriteString(") { return }")
 		}
 		builder.WriteString("}, ")
@@ -82,8 +83,10 @@ func astToGoSource(node *expr.Expr) (string, error) {
 				}
 				builder.WriteString("if !yield(")
 				builder.WriteString(keySource)
+				builder.WriteString(".DynValue()")
 				builder.WriteString(", ")
 				builder.WriteString(valSource)
+				builder.WriteString(".DynValue()")
 				builder.WriteString(") { return }")
 			}
 			builder.WriteString("}, ")
@@ -100,9 +103,9 @@ func astToGoSource(node *expr.Expr) (string, error) {
 			return "", fmt.Errorf("operand: %w", err)
 		}
 		if exprKind.SelectExpr.TestOnly {
-			return fmt.Sprintf("runtime.Has(%s, %q)", operandGo, exprKind.SelectExpr.GetField()), nil
+			return fmt.Sprintf("runtime.Has(%s.DynValue(), %q)", operandGo, exprKind.SelectExpr.GetField()), nil
 		}
-		return fmt.Sprintf("runtime.Select(%s, %q)", operandGo, exprKind.SelectExpr.GetField()), nil
+		return fmt.Sprintf("runtime.Select(%s.DynValue(), %q)", operandGo, exprKind.SelectExpr.GetField()), nil
 	case *expr.Expr_ComprehensionExpr:
 		rangeGo, err := astToGoSource(exprKind.ComprehensionExpr.GetIterRange())
 		if err != nil {
@@ -130,7 +133,7 @@ func astToGoSource(node *expr.Expr) (string, error) {
 		}
 
 		return fmt.Sprintf(`(func() runtime.DynValue {
-			collection := %[1]s
+			collection := %[1]s.DynValue()
 			if collection.Err() != nil {
 				return collection
 			}
@@ -138,7 +141,7 @@ func astToGoSource(node *expr.Expr) (string, error) {
 			collectionVal := reflect.ValueOf(collection.Val())
 			switch collectionVal.Type().Kind() {
 			case reflect.Slice:
-				%[2]s := %[3]s
+				%[2]s := %[3]s.DynValue()
 				if %[2]s.Err() != nil {
 					return %[2]s
 				}
@@ -146,7 +149,7 @@ func astToGoSource(node *expr.Expr) (string, error) {
 				for i := range collectionVal.Len() {
 					%[4]s := runtime.DynValueOf(collectionVal.Index(i).Interface())
 
-					cond := %[5]s
+					cond := %[5]s.DynValue()
 					if cond.Err() != nil {
 						return cond
 					}
@@ -154,15 +157,15 @@ func astToGoSource(node *expr.Expr) (string, error) {
 						break
 					}
 
-					%[2]s = %[6]s
+					%[2]s = %[6]s.DynValue()
 					if %[2]s.Err() != nil {
 						return %[2]s
 					}
 				}
 
-				return %[7]s
+				return %[7]s.DynValue()
 			case reflect.Map:
-				%[2]s := %[3]s
+				%[2]s := %[3]s.DynValue()
 				if %[2]s.Err() != nil {
 					return %[2]s
 				}
@@ -171,7 +174,7 @@ func astToGoSource(node *expr.Expr) (string, error) {
 				for mapIter.Next() {
 					%[4]s := runtime.DynValueOf(mapIter.Key().Interface())
 
-					cond := %[5]s
+					cond := %[5]s.DynValue()
 					if cond.Err() != nil {
 						return cond
 					}
@@ -179,13 +182,13 @@ func astToGoSource(node *expr.Expr) (string, error) {
 						break
 					}
 
-					%[2]s = %[6]s
+					%[2]s = %[6]s.DynValue()
 					if %[2]s.Err() != nil {
 						return %[2]s
 					}
 				}
 
-				return %[7]s
+				return %[7]s.DynValue()
 			default:
 				return runtime.DynErrorOf(fmt.Errorf("unsupported comprehension type %%T", collectionVal))
 			}
@@ -250,15 +253,15 @@ func astToGoSource(node *expr.Expr) (string, error) {
 		switch exprKind.CallExpr.GetFunction() {
 		case operators.Conditional:
 			return fmt.Sprintf(`(func() runtime.DynValue {
-				cond := %s
+				cond := %s.DynValue()
 				if cond.Err() != nil {
 					return cond
 				}
 
 				if cond.Val() == true {
-					return %s
+					return %s.DynValue()
 				} else {
-					return %s
+					return %s.DynValue()
 				}
 			})()`, argsGo[0], argsGo[1], argsGo[2]), nil
 		case operators.LogicalAnd:

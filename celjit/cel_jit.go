@@ -21,12 +21,25 @@ type Config struct {
 type ExprConfig struct {
 	Expr       string
 	Parameters []Parameter
+	ReturnType *cel.Type
 }
 
 // Parameter is a CEL parameter with a name and a type.
 type Parameter struct {
 	Name string
 	Type *cel.Type
+}
+
+// celTypeToRuntimeTypes maps CEL types to their JIT runtime types.
+func celTypeToRuntimeTypes(t *cel.Type) (goType string, runtimeType string, _ error) {
+	switch t {
+	case cel.DynType:
+		return "any", "DynValue", nil
+	case cel.IntType:
+		return "int64", "IntValue", nil
+	default:
+		return "", "", fmt.Errorf("unhandled type %v", t)
+	}
 }
 
 // Compile returns a JIT-compiled version of the given CEL expression. For each
@@ -105,11 +118,16 @@ var (
 			return nil, fmt.Errorf("CEL env: %w", err)
 		}
 
-		// Parse AST.
+		// Compile and check return type.
 		ast, iss := env.Compile(exprConfig.Expr)
 		if err := iss.Err(); err != nil {
 			return nil, fmt.Errorf("CEL compile: %w", err)
 		}
+		if exprConfig.ReturnType != cel.DynType && !ast.OutputType().IsAssignableType(exprConfig.ReturnType) {
+			return nil, fmt.Errorf("CEL return type %v does not match expected return type %v", ast.OutputType(), exprConfig.ReturnType)
+		}
+
+		// Get AST.
 		astExpr, err := cel.AstToCheckedExpr(ast)
 		if err := iss.Err(); err != nil {
 			return nil, fmt.Errorf("CEL checked expr to AST: %w", err)
@@ -121,23 +139,55 @@ var (
 			return nil, fmt.Errorf("generate Go source: %w", err)
 		}
 
+		// Get runtime types.
+		type runtimeParameter struct {
+			parameter   Parameter
+			goType      string
+			runtimeType string
+		}
+		runtimeParameters := make([]runtimeParameter, 0, len(exprConfig.Parameters))
+		for _, parameter := range exprConfig.Parameters {
+			goType, runtimeType, err := celTypeToRuntimeTypes(parameter.Type)
+			if err != nil {
+				return nil, fmt.Errorf("parameter %q type: %w", parameter.Name, err)
+			}
+			runtimeParameters = append(runtimeParameters, runtimeParameter{
+				parameter: parameter,
+				goType: goType,
+				runtimeType: runtimeType,
+			})
+		}
+		returnGoType, returnRuntimeType, err := celTypeToRuntimeTypes(exprConfig.ReturnType)
+		if err != nil {
+			return nil, fmt.Errorf("return type: %w", err)
+		}
+
 		// Write the program.
 		if _, err := fmt.Fprintf(programFile,
 `
-func Program%d(%s) (any, error) {
-	val := program%[1]d(%[3]s)
+func Program%d(%s) (%s, error) {
+	val := program%[1]d(%[4]s)
 	return val.Val(), val.Err()
 }
 
-func program%[1]d(%[4]s) runtime.DynValue {
-	return %s
+func program%[1]d(%[5]s) runtime.%s {
+	return %s.%s()
 }
 `,
 			i,
-			repeatParams("%s any", exprConfig.Parameters, mangleParameter),
-			repeatParams("runtime.DynValueOf(%s)", exprConfig.Parameters, mangleParameter),
-			repeatParams("%s runtime.DynValue", exprConfig.Parameters, mangleVariable),
+			repeat("%s %s", runtimeParameters, func(r runtimeParameter) []any {
+				return []any{mangleParameter(r.parameter.Name), r.goType}
+			}),
+			returnGoType,
+			repeat("runtime.%sOf(%s)", runtimeParameters, func(r runtimeParameter) []any {
+				return []any{r.runtimeType, mangleParameter(r.parameter.Name)}
+			}),
+			repeat("%s runtime.%s", runtimeParameters, func(r runtimeParameter) []any {
+				return []any{mangleVariable(r.parameter.Name), r.runtimeType}
+			}),
+			returnRuntimeType,
 			goSource,
+			returnRuntimeType,
 		); err != nil {
 			return nil, err
 		}
@@ -188,17 +238,13 @@ func program%[1]d(%[4]s) runtime.DynValue {
 	return funcs, nil
 }
 
-func repeatParams(format string, params []Parameter, mangler func(string) string) string {
+func repeat[T any](format string, vals []T, mapper func(T) []any) string {
 	var builder strings.Builder
-	for i, param := range params {
+	for i, val := range vals {
 		if i > 0 {
 			builder.WriteString(", ")
 		}
-		if mangler != nil {
-			fmt.Fprintf(&builder, format, mangler(param.Name))
-		} else {
-			fmt.Fprintf(&builder, format, param.Name)
-		}
+		fmt.Fprintf(&builder, format, mapper(val)...)
 	}
 	return builder.String()
 }
