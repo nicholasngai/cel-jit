@@ -19,16 +19,16 @@ func astToGoSource(node *expr.Expr) (string, error) {
 		case *expr.Constant_Int64Value:
 			return fmt.Sprintf("runtime.IntValueOf(int64(%d))", constKind.Int64Value), nil
 		case *expr.Constant_Uint64Value:
-			return fmt.Sprintf("runtime.DynValueOf(uint64(%d))", constKind.Uint64Value), nil
+			return fmt.Sprintf("runtime.UintValueOf(uint64(%d))", constKind.Uint64Value), nil
 		case *expr.Constant_DoubleValue:
-			return fmt.Sprintf("runtime.DynValueOf(%f)", constKind.DoubleValue), nil
+			return fmt.Sprintf("runtime.DoubleValueOf(%f)", constKind.DoubleValue), nil
 		case *expr.Constant_BoolValue:
-			return fmt.Sprintf("runtime.DynValueOf(%t)", constKind.BoolValue), nil
+			return fmt.Sprintf("runtime.BoolValueOf(%t)", constKind.BoolValue), nil
 		case *expr.Constant_StringValue:
-			return fmt.Sprintf("runtime.DynValueOf(%q)", constKind.StringValue), nil
+			return fmt.Sprintf("runtime.StringValueOf(%q)", constKind.StringValue), nil
 		case *expr.Constant_BytesValue:
 			var builder strings.Builder
-			builder.WriteString("runtime.DynValueOf([]byte{")
+			builder.WriteString("runtime.BytesValueOf([]byte{")
 			for i, b := range constKind.BytesValue {
 				if i > 0 {
 					builder.WriteString(", ")
@@ -38,7 +38,9 @@ func astToGoSource(node *expr.Expr) (string, error) {
 			builder.WriteString("})")
 			return builder.String(), nil
 		case *expr.Constant_NullValue:
-			return "runtime.DynValueOf(nil)", nil
+			return "(runtime.NullValue{})", nil
+		// TODO(nngai) timestamp(const) and duration(const) are common enough
+		// that we should probably optimize them to be constant.
 		default:
 			return "", fmt.Errorf("unsupported constant kind %q", exprKind.ConstExpr.GetConstantKind())
 		}

@@ -37,6 +37,22 @@ func celTypeToRuntimeTypes(t *cel.Type) (goType string, runtimeType string, _ er
 		return "any", "DynValue", nil
 	case cel.IntType:
 		return "int64", "IntValue", nil
+	case cel.UintType:
+		return "uint64", "UintValue", nil
+	case cel.DoubleType:
+		return "float64", "DoubleValue", nil
+	case cel.BoolType:
+		return "bool", "BoolValue", nil
+	case cel.StringType:
+		return "string", "StringValue", nil
+	case cel.BytesType:
+		return "[]byte", "BytesValue", nil
+	case cel.TimestampType:
+		return "time.Time", "TimestampValue", nil
+	case cel.DurationType:
+		return "time.Duration", "DurationValue", nil
+	case cel.NullType:
+		return "struct{}", "NullValue", nil
 	default:
 		return "", "", fmt.Errorf("unhandled type %v", t)
 	}
@@ -86,6 +102,7 @@ replace github.com/nicholasngai/cel-jit/runtime-source => %s
 import (
 	"fmt"
 	"reflect"
+	"time"
 
 	"github.com/nicholasngai/cel-jit/runtime-source/runtime"
 )
@@ -93,6 +110,7 @@ import (
 var (
 	_ = fmt.Print
 	_ = reflect.ValueOf
+	_ = time.Parse
 )
 `,
 	); err != nil {
@@ -115,28 +133,28 @@ var (
 		// Make CEL env.
 		env, err := cel.NewEnv(envOptions...)
 		if err != nil {
-			return nil, fmt.Errorf("CEL env: %w", err)
+			return nil, fmt.Errorf("%q: CEL env: %w", exprConfig.Expr, err)
 		}
 
 		// Compile and check return type.
 		ast, iss := env.Compile(exprConfig.Expr)
 		if err := iss.Err(); err != nil {
-			return nil, fmt.Errorf("CEL compile: %w", err)
+			return nil, fmt.Errorf("%q: CEL compile: %w", exprConfig.Expr, err)
 		}
 		if exprConfig.ReturnType != cel.DynType && !ast.OutputType().IsAssignableType(exprConfig.ReturnType) {
-			return nil, fmt.Errorf("CEL return type %v does not match expected return type %v", ast.OutputType(), exprConfig.ReturnType)
+			return nil, fmt.Errorf("%q: CEL return type %v does not match expected return type %v", exprConfig.Expr, ast.OutputType(), exprConfig.ReturnType)
 		}
 
 		// Get AST.
 		astExpr, err := cel.AstToCheckedExpr(ast)
 		if err := iss.Err(); err != nil {
-			return nil, fmt.Errorf("CEL checked expr to AST: %w", err)
+			return nil, fmt.Errorf("%q: CEL checked expr to AST: %w", exprConfig.Expr, err)
 		}
 
 		// Make Go source.
 		goSource, err := astToGoSource(astExpr.GetExpr())
 		if err != nil {
-			return nil, fmt.Errorf("generate Go source: %w", err)
+			return nil, fmt.Errorf("%q: generate Go source: %w", exprConfig.Expr, err)
 		}
 
 		// Get runtime types.
@@ -149,7 +167,7 @@ var (
 		for _, parameter := range exprConfig.Parameters {
 			goType, runtimeType, err := celTypeToRuntimeTypes(parameter.Type)
 			if err != nil {
-				return nil, fmt.Errorf("parameter %q type: %w", parameter.Name, err)
+				return nil, fmt.Errorf("%q: parameter %q type: %w", exprConfig.Expr, parameter.Name, err)
 			}
 			runtimeParameters = append(runtimeParameters, runtimeParameter{
 				parameter: parameter,
@@ -159,7 +177,7 @@ var (
 		}
 		returnGoType, returnRuntimeType, err := celTypeToRuntimeTypes(exprConfig.ReturnType)
 		if err != nil {
-			return nil, fmt.Errorf("return type: %w", err)
+			return nil, fmt.Errorf("%q: return type: %w", exprConfig.Expr, err)
 		}
 
 		// Write the program.
