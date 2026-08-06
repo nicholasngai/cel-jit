@@ -2,7 +2,6 @@ package runtime
 
 import (
 	"fmt"
-	"iter"
 	"reflect"
 	"time"
 )
@@ -242,40 +241,8 @@ func toMap(v reflect.Value, keyType reflect.Type, valueType reflect.Type) (refle
 	return result, nil
 }
 
-// DynValueOf returns a [DynValue] for the given value.
 func DynValueOf(v any) DynValue {
 	return DynValue{v: v}
-}
-
-// DynValueOfSlice returns a [DynValue] containing a slice from an iterator of
-// [DynValue]s. If any value is an error, it returns the first error value
-// instead.
-func DynValueOfSlice(elems iter.Seq[DynValue], len int) DynValue {
-	listVal := make([]any, 0, len)
-	for elem := range elems {
-		if elem.err != nil {
-			return elem
-		}
-		listVal = append(listVal, elem.v)
-	}
-	return DynValue{v: listVal}
-}
-
-// DynValueOfMap returns a [DynValue] containing a map from an iterator of
-// key-value [DynValue] pairs. If any value is an error, it returns the first
-// error value instead.
-func DynValueOfMap(entries iter.Seq2[DynValue, DynValue], len int) DynValue {
-	mapVal := make(map[any]any, len)
-	for key, value := range entries {
-		if key.err != nil {
-			return key
-		}
-		if value.err != nil {
-			return value
-		}
-		mapVal[key.v] = value.v
-	}
-	return DynValue{v: mapVal}
 }
 
 func DynErrorOf(err error) DynValue {

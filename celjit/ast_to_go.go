@@ -47,59 +47,65 @@ func astToGoSource(node *expr.Expr, checkedExpr *expr.CheckedExpr) (string, erro
 		}
 	case *expr.Expr_ListExpr:
 		var builder strings.Builder
-		builder.WriteString("runtime.DynValueOfSlice(func(yield func(v runtime.DynValue) bool) {")
+		fmt.Fprintf(&builder, `(func() runtime.DynValue {
+			s := make([]any, %d)`,
+		len(exprKind.ListExpr.GetElements()))
 		for i, elem := range exprKind.ListExpr.GetElements() {
-			if i > 0 {
-				builder.WriteString("; ")
-			}
-
 			elemSource, err := astToGoSource(elem, checkedExpr)
 			if err != nil {
 				return "", fmt.Errorf("list elem %d: %w", i, err)
 			}
-			builder.WriteString("if !yield(")
-			builder.WriteString(elemSource)
-			builder.WriteString(".DynValue()")
-			builder.WriteString(") { return }")
+
+			fmt.Fprintf(&builder, `
+			elem%d := %s
+			if elem%[1]d.Err() != nil {
+				return elem%[1]d.DynValue()
+			}
+			s[%[1]d] = elem%[1]d.Val()`,
+			i, elemSource)
 		}
-		builder.WriteString("}, ")
-		builder.WriteString(strconv.Itoa(len(exprKind.ListExpr.GetElements())))
-		builder.WriteString(")")
+		builder.WriteString(`
+			return runtime.DynValueOf(s)
+		})()`)
 		return builder.String(), nil
 	case *expr.Expr_StructExpr:
 		if exprKind.StructExpr.MessageName == "" {
 			// Map.
 			var builder strings.Builder
-			builder.WriteString("runtime.DynValueOfMap(func(yield func(key, value runtime.DynValue) bool) {")
+			fmt.Fprintf(&builder, `(func() runtime.DynValue {
+				s := make(map[any]any, %d)`,
+			len(exprKind.StructExpr.GetEntries()))
 			for i, entry := range exprKind.StructExpr.GetEntries() {
-				if i > 0 {
-					builder.WriteString("; ")
-				}
-
 				keySource, err := astToGoSource(entry.GetMapKey(), checkedExpr)
 				if err != nil {
 					return "", fmt.Errorf("map key %d: %w", i, err)
 				}
+
 				valSource, err := astToGoSource(entry.GetValue(), checkedExpr)
 				if err != nil {
 					return "", fmt.Errorf("map value %d: %w", i, err)
 				}
-				builder.WriteString("if !yield(")
-				builder.WriteString(keySource)
-				builder.WriteString(".DynValue()")
-				builder.WriteString(", ")
-				builder.WriteString(valSource)
-				builder.WriteString(".DynValue()")
-				builder.WriteString(") { return }")
+
+				fmt.Fprintf(&builder, `
+				key%d := %s
+				if key%[1]d.Err() != nil {
+					return key%[1]d.DynValue()
+				}
+				val%[1]d := %[3]s
+				if val%[1]d.Err() != nil {
+					return val%[1]d.DynValue()
+				}
+				s[key%[1]d.Val()] = val%[1]d.Val()`,
+				i, keySource, valSource)
 			}
-			builder.WriteString("}, ")
-			builder.WriteString(strconv.Itoa(len(exprKind.StructExpr.GetEntries())))
-			builder.WriteString(")")
+			builder.WriteString(`
+				return runtime.DynValueOf(s)
+			})()`)
 			return builder.String(), nil
-			} else {
-				// Message.
-				return "", errors.New("message literals unsupported")
-			}
+		} else {
+			// Message.
+			return "", errors.New("message literals unsupported")
+		}
 	case *expr.Expr_SelectExpr:
 		operandGo, err := astToGoSource(exprKind.SelectExpr.GetOperand(), checkedExpr)
 		if err != nil {
