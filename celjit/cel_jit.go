@@ -43,7 +43,7 @@ func celTypeToRuntimeTypes(t *cel.Type) (
 		if err != nil {
 			return "", "", nil, fmt.Errorf("list[0]: %w", err)
 		}
-		return fmt.Sprintf("[]%s", elemGoType), fmt.Sprintf("ListValue[%s]", elemGoType), func(s string) string { return fmt.Sprintf("runtime.ToListValue[%s](%s)", elemGoType, s) }, nil
+		return fmt.Sprintf("[]%s", elemGoType), fmt.Sprintf("runtime.ListValue[%s]", elemGoType), func(s string) string { return fmt.Sprintf("runtime.ToListValue[%s](%s)", elemGoType, s) }, nil
 	case cel.MapKind:
 		keyGoType, _, _, err := celTypeToRuntimeTypes(t.Parameters()[0])
 		if err != nil {
@@ -53,30 +53,30 @@ func celTypeToRuntimeTypes(t *cel.Type) (
 		if err != nil {
 			return "", "", nil, fmt.Errorf("map[1]: %w", err)
 		}
-		return fmt.Sprintf("map[%s]%s", keyGoType, valGoType), fmt.Sprintf("MapValue[%s, %s]", keyGoType, valGoType), func(s string) string { return fmt.Sprintf("runtime.ToMapValue[%s, %s](%s)", keyGoType, valGoType, s) }, nil
+		return fmt.Sprintf("map[%s]%s", keyGoType, valGoType), fmt.Sprintf("runtime.MapValue[%s, %s]", keyGoType, valGoType), func(s string) string { return fmt.Sprintf("runtime.ToMapValue[%s, %s](%s)", keyGoType, valGoType, s) }, nil
 	}
 
 	switch t {
 	case cel.DynType:
-		return "any", "DynValue", func(s string) string { return fmt.Sprintf("%s.DynValue()", s) }, nil
+		return "any", "runtime.DynValue", func(s string) string { return fmt.Sprintf("%s.DynValue()", s) }, nil
 	case cel.IntType:
-		return "int64", "IntValue", func(s string) string { return fmt.Sprintf("%s.IntValue()", s) }, nil
+		return "int64", "runtime.IntValue", func(s string) string { return fmt.Sprintf("%s.IntValue()", s) }, nil
 	case cel.UintType:
-		return "uint64", "UintValue", func(s string) string { return fmt.Sprintf("%s.UintValue()", s) }, nil
+		return "uint64", "runtime.UintValue", func(s string) string { return fmt.Sprintf("%s.UintValue()", s) }, nil
 	case cel.DoubleType:
-		return "float64", "DoubleValue", func(s string) string { return fmt.Sprintf("%s.DoubleValue()", s) }, nil
+		return "float64", "runtime.DoubleValue", func(s string) string { return fmt.Sprintf("%s.DoubleValue()", s) }, nil
 	case cel.BoolType:
-		return "bool", "BoolValue", func(s string) string { return fmt.Sprintf("%s.BoolValue()", s) }, nil
+		return "bool", "runtime.BoolValue", func(s string) string { return fmt.Sprintf("%s.BoolValue()", s) }, nil
 	case cel.StringType:
-		return "string", "StringValue", func(s string) string { return fmt.Sprintf("%s.StringValue()", s) }, nil
+		return "string", "runtime.StringValue", func(s string) string { return fmt.Sprintf("%s.StringValue()", s) }, nil
 	case cel.BytesType:
-		return "[]byte", "BytesValue", func(s string) string { return fmt.Sprintf("%s.BytesValue()", s) }, nil
+		return "[]byte", "runtime.BytesValue", func(s string) string { return fmt.Sprintf("%s.BytesValue()", s) }, nil
 	case cel.TimestampType:
-		return "time.Time", "TimestampValue", func(s string) string { return fmt.Sprintf("%s.TimestampValue()", s) }, nil
+		return "time.Time", "runtime.TimestampValue", func(s string) string { return fmt.Sprintf("%s.TimestampValue()", s) }, nil
 	case cel.DurationType:
-		return "time.Duration", "DurationValue", func(s string) string { return fmt.Sprintf("%s.DurationValue()", s) }, nil
+		return "time.Duration", "runtime.DurationValue", func(s string) string { return fmt.Sprintf("%s.DurationValue()", s) }, nil
 	case cel.NullType:
-		return "struct{}", "NullValue", func(s string) string { return fmt.Sprintf("%s.NullValue()", s) }, nil
+		return "struct{}", "runtime.NullValue", func(s string) string { return fmt.Sprintf("%s.NullValue()", s) }, nil
 	default:
 		return "", "", nil, fmt.Errorf("unhandled type %v", t)
 	}
@@ -213,7 +213,7 @@ func Program%d(%s) (%s, error) {
 	return val.Val, val.Err
 }
 
-func program%[1]d(%[5]s) runtime.%s {
+func program%[1]d(%[5]s) %s {
 	return %s
 }
 `,
@@ -222,10 +222,10 @@ func program%[1]d(%[5]s) runtime.%s {
 				return []any{mangleParameter(r.parameter.Name), r.goType}
 			}),
 			returnGoType,
-			repeat("runtime.%s{Val: %s}", runtimeParameters, func(r runtimeParameter) []any {
+			repeat("%s{Val: %s}", runtimeParameters, func(r runtimeParameter) []any {
 				return []any{r.runtimeType, mangleParameter(r.parameter.Name)}
 			}),
-			repeat("%s runtime.%s", runtimeParameters, func(r runtimeParameter) []any {
+			repeat("%s %s", runtimeParameters, func(r runtimeParameter) []any {
 				return []any{mangleVariable(r.parameter.Name), r.runtimeType}
 			}),
 			returnRuntimeType,
