@@ -559,12 +559,18 @@ func Divide(a, b DynValue) DynValue {
 	aInt, aOk := a.Val.(int64)
 	bInt, bOk := b.Val.(int64)
 	if aOk && bOk {
+		if bInt == 0 {
+			return DynValue{Err: errors.New("divide by 0")}
+		}
 		return DynValue{Val: aInt / bInt}
 	}
 
 	aUint, aOk := a.Val.(uint64)
 	bUint, bOk := b.Val.(uint64)
 	if aOk && bOk {
+		if bUint == 0 {
+			return DynValue{Err: errors.New("divide by 0")}
+		}
 		return DynValue{Val: aUint / bUint}
 	}
 
@@ -588,12 +594,18 @@ func Modulo(a, b DynValue) DynValue {
 	aInt, aOk := a.Val.(int64)
 	bInt, bOk := b.Val.(int64)
 	if aOk && bOk {
+		if bInt == 0 {
+			return DynValue{Err: errors.New("modulo by 0")}
+		}
 		return DynValue{Val: aInt % bInt}
 	}
 
 	aUint, aOk := a.Val.(uint64)
 	bUint, bOk := b.Val.(uint64)
 	if aOk && bOk {
+		if bUint == 0 {
+			return DynValue{Err: errors.New("modulo by 0")}
+		}
 		return DynValue{Val: aUint % bUint}
 	}
 
