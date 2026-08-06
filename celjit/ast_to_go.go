@@ -7,10 +7,11 @@ import (
 	"strings"
 
 	"github.com/google/cel-go/common/operators"
+	"github.com/google/cel-go/common/overloads"
 	expr "google.golang.org/genproto/googleapis/api/expr/v1alpha1"
 )
 
-func astToGoSource(node *expr.Expr) (string, error) {
+func astToGoSource(node *expr.Expr, checkedExpr *expr.CheckedExpr) (string, error) {
 	switch exprKind := node.GetExprKind().(type) {
 	case *expr.Expr_IdentExpr:
 		return mangleVariable(exprKind.IdentExpr.GetName()), nil
@@ -52,7 +53,7 @@ func astToGoSource(node *expr.Expr) (string, error) {
 				builder.WriteString("; ")
 			}
 
-			elemSource, err := astToGoSource(elem)
+			elemSource, err := astToGoSource(elem, checkedExpr)
 			if err != nil {
 				return "", fmt.Errorf("list elem %d: %w", i, err)
 			}
@@ -75,11 +76,11 @@ func astToGoSource(node *expr.Expr) (string, error) {
 					builder.WriteString("; ")
 				}
 
-				keySource, err := astToGoSource(entry.GetMapKey())
+				keySource, err := astToGoSource(entry.GetMapKey(), checkedExpr)
 				if err != nil {
 					return "", fmt.Errorf("map key %d: %w", i, err)
 				}
-				valSource, err := astToGoSource(entry.GetValue())
+				valSource, err := astToGoSource(entry.GetValue(), checkedExpr)
 				if err != nil {
 					return "", fmt.Errorf("map value %d: %w", i, err)
 				}
@@ -100,7 +101,7 @@ func astToGoSource(node *expr.Expr) (string, error) {
 				return "", errors.New("message literals unsupported")
 			}
 	case *expr.Expr_SelectExpr:
-		operandGo, err := astToGoSource(exprKind.SelectExpr.GetOperand())
+		operandGo, err := astToGoSource(exprKind.SelectExpr.GetOperand(), checkedExpr)
 		if err != nil {
 			return "", fmt.Errorf("operand: %w", err)
 		}
@@ -109,27 +110,27 @@ func astToGoSource(node *expr.Expr) (string, error) {
 		}
 		return fmt.Sprintf("runtime.Select(%s.DynValue(), %q)", operandGo, exprKind.SelectExpr.GetField()), nil
 	case *expr.Expr_ComprehensionExpr:
-		rangeGo, err := astToGoSource(exprKind.ComprehensionExpr.GetIterRange())
+		rangeGo, err := astToGoSource(exprKind.ComprehensionExpr.GetIterRange(), checkedExpr)
 		if err != nil {
 			return "", fmt.Errorf("range: %w", err)
 		}
 
-		accumulatorInitGo, err := astToGoSource(exprKind.ComprehensionExpr.GetAccuInit())
+		accumulatorInitGo, err := astToGoSource(exprKind.ComprehensionExpr.GetAccuInit(), checkedExpr)
 		if err != nil {
 			return "", fmt.Errorf("accumulator init: %w", err)
 		}
 
-		loopStepGo, err := astToGoSource(exprKind.ComprehensionExpr.GetLoopStep())
+		loopStepGo, err := astToGoSource(exprKind.ComprehensionExpr.GetLoopStep(), checkedExpr)
 		if err != nil {
 			return "", fmt.Errorf("loop step: %w", err)
 		}
 
-		loopCondGo, err := astToGoSource(exprKind.ComprehensionExpr.GetLoopCondition())
+		loopCondGo, err := astToGoSource(exprKind.ComprehensionExpr.GetLoopCondition(), checkedExpr)
 		if err != nil {
 			return "", fmt.Errorf("loop condition: %w", err)
 		}
 
-		resultGo, err := astToGoSource(exprKind.ComprehensionExpr.GetResult())
+		resultGo, err := astToGoSource(exprKind.ComprehensionExpr.GetResult(), checkedExpr)
 		if err != nil {
 			return "", fmt.Errorf("result: %w", err)
 		}
@@ -199,7 +200,7 @@ func astToGoSource(node *expr.Expr) (string, error) {
 		// Arguments.
 		argsGo := make([]string, 0, len(exprKind.CallExpr.GetArgs()))
 		for i, arg := range exprKind.CallExpr.GetArgs() {
-			argGo, err := astToGoSource(arg)
+			argGo, err := astToGoSource(arg, checkedExpr)
 			if err != nil {
 				return "", fmt.Errorf("args[%d]: %w", i, err)
 			}
@@ -207,7 +208,7 @@ func astToGoSource(node *expr.Expr) (string, error) {
 		}
 
 		if exprKind.CallExpr.GetTarget() != nil {
-			targetGo, err := astToGoSource(exprKind.CallExpr.GetTarget())
+			targetGo, err := astToGoSource(exprKind.CallExpr.GetTarget(), checkedExpr)
 			if err != nil {
 				return "", fmt.Errorf("target: %w", err)
 			}
@@ -285,7 +286,12 @@ func astToGoSource(node *expr.Expr) (string, error) {
 		case operators.GreaterEquals:
 			return fmt.Sprintf("runtime.GreaterEquals(%s.DynValue(), %s.DynValue())", argsGo[0], argsGo[1]), nil
 		case operators.Add:
-			return fmt.Sprintf("runtime.Add(%s.DynValue(), %s.DynValue())", argsGo[0], argsGo[1]), nil
+			switch extractOverloadID(checkedExpr.GetReferenceMap()[node.GetId()].GetOverloadId()) {
+			case overloads.AddInt64:
+				return fmt.Sprintf("runtime.AddInt64(%s.IntValue(), %s.IntValue())", argsGo[0], argsGo[1]), nil
+			default:
+				return fmt.Sprintf("runtime.Add(%s.DynValue(), %s.DynValue())", argsGo[0], argsGo[1]), nil
+			}
 		case operators.Subtract:
 			return fmt.Sprintf("runtime.Subtract(%s.DynValue(), %s.DynValue())", argsGo[0], argsGo[1]), nil
 		case operators.Multiply:
@@ -348,4 +354,13 @@ func mangleVariable(varName string) string {
 	} else {
 		return fmt.Sprintf("var__%s", varName)
 	}
+}
+
+func extractOverloadID(overloadIDs []string) string {
+	// We can only optimize to an overload variant if there is a single overload
+	// identified by CEL. Else we fall back to dynamic.
+	if len(overloadIDs) != 1 {
+		return ""
+	}
+	return overloadIDs[0]
 }

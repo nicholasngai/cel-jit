@@ -152,7 +152,7 @@ var (
 		}
 
 		// Make Go source.
-		goSource, err := astToGoSource(astExpr.GetExpr())
+		goSource, err := astToGoSource(astExpr.GetExpr(), astExpr)
 		if err != nil {
 			return nil, fmt.Errorf("%q: generate Go source: %w", exprConfig.Expr, err)
 		}

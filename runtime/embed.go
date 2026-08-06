@@ -2,5 +2,5 @@ package runtime
 
 import "embed"
 
-//go:embed runtime.go types.go
+//go:embed overloads.go runtime.go types.go
 var Source embed.FS
