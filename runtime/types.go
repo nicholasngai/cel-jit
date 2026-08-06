@@ -132,21 +132,28 @@ func (v DynValue) NullValue() NullValue {
 	return NullValue{}
 }
 
-func ToListValue[T any](v DynValue) ListValue[T] {
-	if v.Err != nil {
-		return ListValue[T]{Err: v.Err}
-	}
+func ToListValue[T any, V DynValue | ListValue[T]](v V) ListValue[T] {
+	switch v := any(v).(type) {
+	case ListValue[T]:
+		return v
+	case DynValue:
+		if v.Err != nil {
+			return ListValue[T]{Err: v.Err}
+		}
 
-	if vList, ok := v.Val.([]T); ok {
-		return ListValue[T]{Val: vList}
-	}
+		if vList, ok := v.Val.([]T); ok {
+			return ListValue[T]{Val: vList}
+		}
 
-	listVal, err := toSlice(reflect.ValueOf(v.Val), reflect.TypeFor[T]())
-	if err != nil {
-		return ListValue[T]{Err: err}
-	}
+		listVal, err := toSlice(reflect.ValueOf(v.Val), reflect.TypeFor[T]())
+		if err != nil {
+			return ListValue[T]{Err: err}
+		}
 
-	return ListValue[T]{Val: listVal.Interface().([]T)}
+		return ListValue[T]{Val: listVal.Interface().([]T)}
+	default:
+		panic("unreachable")
+	}
 }
 
 func toSlice(v reflect.Value, elemType reflect.Type) (reflect.Value, error) {

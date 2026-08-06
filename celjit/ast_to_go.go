@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/common/operators"
 	"github.com/google/cel-go/common/overloads"
 	expr "google.golang.org/genproto/googleapis/api/expr/v1alpha1"
@@ -46,10 +47,26 @@ func astToGoSource(node *expr.Expr, checkedExpr *expr.CheckedExpr) (string, erro
 			return "", fmt.Errorf("unsupported constant kind %q", exprKind.ConstExpr.GetConstantKind())
 		}
 	case *expr.Expr_ListExpr:
+		listExprType, ok := checkedExpr.GetTypeMap()[node.GetId()]
+		if !ok {
+			return "", fmt.Errorf("no type info for node %d", node.GetId())
+		}
+		listType, err := cel.ExprTypeToType(listExprType)
+		if err != nil {
+			return "", fmt.Errorf("expr type %v to CEL type", listExprType)
+		}
+		if listType.Kind() != cel.ListKind {
+			return "", fmt.Errorf("type info for node %d is %v, not list", node.GetId(), listType.Kind())
+		}
+		elemGoType, _, elemTypeConverter, err := celTypeToRuntimeTypes(listType.Parameters()[0])
+		if err != nil {
+			return "", fmt.Errorf("type %v to runtime types: %w", listType.Parameters()[0], err)
+		}
+
 		var builder strings.Builder
-		fmt.Fprintf(&builder, `(func() runtime.DynValue {
-			s := make([]any, %d)`,
-			len(exprKind.ListExpr.GetElements()),
+		fmt.Fprintf(&builder, `(func() runtime.ListValue[%s] {
+			s := make([]%[1]s, %d)`,
+			elemGoType, len(exprKind.ListExpr.GetElements()),
 		)
 		for i, elem := range exprKind.ListExpr.GetElements() {
 			elemSource, err := astToGoSource(elem, checkedExpr)
@@ -60,15 +77,17 @@ func astToGoSource(node *expr.Expr, checkedExpr *expr.CheckedExpr) (string, erro
 			fmt.Fprintf(&builder, `
 			elem%d := %s
 			if elem%[1]d.Err != nil {
-				return elem%[1]d.DynValue()
+				return runtime.ListValue[%[3]s]{Err: elem%[1]d.Err}
 			}
-			s[%[1]d] = elem%[1]d.Val`,
-				i, elemSource,
+			s[%[1]d] = %[4]s.Val`,
+				i, elemSource, elemGoType, elemTypeConverter(fmt.Sprintf("elem%d", i)),
 			)
 		}
-		builder.WriteString(`
-			return runtime.DynValue{Val: s}
-		})()`)
+		fmt.Fprintf(&builder, `
+			return runtime.ListValue[%s]{Val: s}
+		})()`,
+			elemGoType,
+		)
 		return builder.String(), nil
 	case *expr.Expr_StructExpr:
 		if exprKind.StructExpr.MessageName == "" {

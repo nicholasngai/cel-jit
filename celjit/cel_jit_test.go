@@ -23,7 +23,8 @@ var tests = []struct {
 	{"StringConst", "\"foobar\"", nil, nil, nil, cel.StringType},
 	{"BytesConst", "b\"foobar\"", nil, nil, nil, cel.BytesType},
 	{"NullLiteral", "null", nil, nil, nil, cel.NullType},
-	{"ListLiteral", "[1, 2, 3]", nil, nil, nil, cel.DynType},
+	{"ListLiteral", "[1, 2, 3]", nil, nil, nil, cel.ListType(cel.IntType)},
+	{"ListLiteralNested", "[[], [[], []]]", nil, nil, nil, cel.ListType(cel.ListType(cel.ListType(cel.DynType)))},
 	{"MapLiteral", "{\"foo\": 1, \"bar\": 2}", nil, nil, nil, cel.DynType},
 	{"Select", "{\"foo\": 1}.foo", nil, nil, nil, cel.IntType},
 	{"SelectMissing", "{\"foo\": 1}.bar", nil, nil, nil, cel.IntType},
@@ -41,11 +42,11 @@ var tests = []struct {
 	{"ExistsError", "[1, 2, {}.error].exists(x, x == 1)", nil, nil, nil, cel.BoolType},
 	{"ExistsOne", "[1, 2, 3].exists_one(x, x == 1)", nil, nil, nil, cel.BoolType},
 	{"ExistsOneMap", "{\"foo\": 1, \"bar\": 2}.exists_one(x, x == \"foo\")", nil, nil, nil, cel.BoolType},
-	{"Map", "[1, 2, 3].map(x, x + 1)", nil, nil, nil, cel.DynType},
+	{"Map", "[1, 2, 3].map(x, x + 1)", nil, nil, nil, cel.ListType(cel.IntType)},
 	{"MapMap", "{\"foo\": 1}.map(x, x + \"_test\")", nil, nil, nil, cel.DynType},
-	{"MapFilter", "[1, 2, 3].map(x, x == 1, x + 1)", nil, nil, nil, cel.DynType},
+	{"MapFilter", "[1, 2, 3].map(x, x == 1, x + 1)", nil, nil, nil, cel.ListType(cel.IntType)},
 	{"MapFilterMap", "{\"foo\": 1, \"bar\": 2}.map(x, x == \"foo\", x + \"_test\")", nil, nil, nil, cel.DynType},
-	{"Filter", "[1, 2, 3].filter(x, x == 1)", nil, nil, nil, cel.DynType},
+	{"Filter", "[1, 2, 3].filter(x, x == 1)", nil, nil, nil, cel.ListType(cel.IntType)},
 	{"FilterMap", "{\"foo\": 1, \"bar\": 2}.filter(x, x == \"foo\")", nil, nil, nil, cel.DynType},
 	{"ConditionalTrue", "true ? 1 : 2", nil, nil, nil, cel.IntType},
 	{"ConditionalFalse", "true ? 1 : 2", nil, nil, nil, cel.IntType},
@@ -226,15 +227,6 @@ func TestConformance(t *testing.T) {
 			}
 
 			celResult, _, celErr := prog.ContextEval(t.Context(), celArgs)
-			var celResultNative any
-			if celErr == nil {
-				r, err := celResult.ConvertToNative(reflect.TypeFor[any]())
-				if err != nil {
-					t.Errorf("Failed to convert CEL result to native: %v", err)
-					return
-				}
-				celResultNative = r
-			}
 
 			// JIT.
 			jitFunc := jitFuncs[i]
@@ -259,7 +251,17 @@ func TestConformance(t *testing.T) {
 
 			// Compare.
 			if celErr == nil && jitErr == nil {
-				if !reflect.DeepEqual(celResultNative, jitResult) && !(celResult.Type() == cel.NullType && (jitResult == struct{}{})) {
+				if celResult.Type() == cel.NullType && (jitResult == struct{}{}) {
+					return
+				}
+
+				celResultNative, err := celResult.ConvertToNative(reflect.TypeOf(jitResult))
+				if err != nil {
+					t.Errorf("Failed to convert CEL result to native: %v", err)
+					return
+				}
+
+				if !reflect.DeepEqual(celResultNative, jitResult) {
 					t.Errorf("Results were not the same. CEL produced: %v, type %[1]T; JIT produced: %v, type %[2]T", celResultNative, jitResult)
 				}
 			} else if celErr == nil {
@@ -355,6 +357,14 @@ func BenchmarkJIT(b *testing.B) {
 					_, _ = f()
 				}
 			case func() ([]byte, error):
+				for b.Loop() {
+					_, _ = f()
+				}
+			case func() ([]int64, error):
+				for b.Loop() {
+					_, _ = f()
+				}
+			case func() ([]string, error):
 				for b.Loop() {
 					_, _ = f()
 				}
