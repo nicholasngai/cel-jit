@@ -388,19 +388,94 @@ func astToGoSource(node *expr.Expr, checkedExpr *expr.CheckedExpr) (string, erro
 			switch extractOverloadID(checkedExpr.GetReferenceMap()[node.GetId()].GetOverloadId()) {
 			case overloads.AddInt64:
 				return fmt.Sprintf("runtime.AddInt64(%s.IntValue(), %s.IntValue())", argsGo[0], argsGo[1]), nil
+			case overloads.AddUint64:
+				return fmt.Sprintf("runtime.AddUint64(%s.UintValue(), %s.UintValue())", argsGo[0], argsGo[1]), nil
+			case overloads.AddDouble:
+				return fmt.Sprintf("runtime.AddDouble(%s.DoubleValue(), %s.DoubleValue())", argsGo[0], argsGo[1]), nil
+			case overloads.AddString:
+				return fmt.Sprintf("runtime.AddString(%s.StringValue(), %s.StringValue())", argsGo[0], argsGo[1]), nil
+			case overloads.AddBytes:
+				return fmt.Sprintf("runtime.AddBytes(%s.BytesValue(), %s.BytesValue())", argsGo[0], argsGo[1]), nil
+			case overloads.AddList:
+				listExprType, ok := checkedExpr.GetTypeMap()[node.GetId()]
+				if !ok {
+					return "", fmt.Errorf("no type info for node %d", node.GetId())
+				}
+				listType, err := cel.ExprTypeToType(listExprType)
+				if err != nil {
+					return "", fmt.Errorf("expr type %v to CEL type", listExprType)
+				}
+				_, _, listTypeConverter, err := celTypeToRuntimeTypes(listType)
+				if err != nil {
+					return "", fmt.Errorf("elem type %v to runtime types: %w", listType, err)
+				}
+				return fmt.Sprintf("runtime.AddList(%s, %s)", listTypeConverter(argsGo[0]), listTypeConverter(argsGo[1])), nil
+			case overloads.AddTimestampDuration:
+				return fmt.Sprintf("runtime.AddTimestampDuration(%s.TimestampValue(), %s.DurationValue())", argsGo[0], argsGo[1]), nil
+			case overloads.AddDurationTimestamp:
+				return fmt.Sprintf("runtime.AddTimestampDuration(%s.TimestampValue(), %s.DurationValue())", argsGo[1], argsGo[0]), nil
+			case overloads.AddDurationDuration:
+				return fmt.Sprintf("runtime.AddDurationDuration(%s.DurationValue(), %s.DurationValue())", argsGo[1], argsGo[0]), nil
 			default:
 				return fmt.Sprintf("runtime.Add(%s.DynValue(), %s.DynValue())", argsGo[0], argsGo[1]), nil
 			}
 		case operators.Subtract:
-			return fmt.Sprintf("runtime.Subtract(%s.DynValue(), %s.DynValue())", argsGo[0], argsGo[1]), nil
+			switch extractOverloadID(checkedExpr.GetReferenceMap()[node.GetId()].GetOverloadId()) {
+			case overloads.SubtractInt64:
+				return fmt.Sprintf("runtime.SubtractInt64(%s.IntValue(), %s.IntValue())", argsGo[0], argsGo[1]), nil
+			case overloads.SubtractUint64:
+				return fmt.Sprintf("runtime.SubtractUint64(%s.UintValue(), %s.UintValue())", argsGo[0], argsGo[1]), nil
+			case overloads.SubtractDouble:
+				return fmt.Sprintf("runtime.SubtractDouble(%s.DoubleValue(), %s.DoubleValue())", argsGo[0], argsGo[1]), nil
+			case overloads.SubtractTimestampTimestamp:
+				return fmt.Sprintf("runtime.SubtractTimestampTimestamp(%s.TimestampValue(), %s.TimestampValue())", argsGo[0], argsGo[1]), nil
+			case overloads.SubtractTimestampDuration:
+				return fmt.Sprintf("runtime.SubtractTimestampDuration(%s.TimestampValue(), %s.DurationValue())", argsGo[0], argsGo[1]), nil
+			case overloads.SubtractDurationDuration:
+				return fmt.Sprintf("runtime.SubtractDurationDuration(%s.DurationValue(), %s.DurationValue())", argsGo[1], argsGo[0]), nil
+			default:
+				return fmt.Sprintf("runtime.Subtract(%s.DynValue(), %s.DynValue())", argsGo[0], argsGo[1]), nil
+			}
 		case operators.Multiply:
-			return fmt.Sprintf("runtime.Multiply(%s.DynValue(), %s.DynValue())", argsGo[0], argsGo[1]), nil
+			switch extractOverloadID(checkedExpr.GetReferenceMap()[node.GetId()].GetOverloadId()) {
+			case overloads.MultiplyInt64:
+				return fmt.Sprintf("runtime.MultiplyInt64(%s.IntValue(), %s.IntValue())", argsGo[0], argsGo[1]), nil
+			case overloads.MultiplyUint64:
+				return fmt.Sprintf("runtime.MultiplyUint64(%s.UintValue(), %s.UintValue())", argsGo[0], argsGo[1]), nil
+			case overloads.MultiplyDouble:
+				return fmt.Sprintf("runtime.MultiplyDouble(%s.DoubleValue(), %s.DoubleValue())", argsGo[0], argsGo[1]), nil
+			default:
+				return fmt.Sprintf("runtime.Multiply(%s.DynValue(), %s.DynValue())", argsGo[0], argsGo[1]), nil
+			}
 		case operators.Divide:
-			return fmt.Sprintf("runtime.Divide(%s.DynValue(), %s.DynValue())", argsGo[0], argsGo[1]), nil
+			switch extractOverloadID(checkedExpr.GetReferenceMap()[node.GetId()].GetOverloadId()) {
+			case overloads.DivideInt64:
+				return fmt.Sprintf("runtime.DivideInt64(%s.IntValue(), %s.IntValue())", argsGo[0], argsGo[1]), nil
+			case overloads.DivideUint64:
+				return fmt.Sprintf("runtime.DivideUint64(%s.UintValue(), %s.UintValue())", argsGo[0], argsGo[1]), nil
+			case overloads.DivideDouble:
+				return fmt.Sprintf("runtime.DivideDouble(%s.DoubleValue(), %s.DoubleValue())", argsGo[0], argsGo[1]), nil
+			default:
+				return fmt.Sprintf("runtime.Divide(%s.DynValue(), %s.DynValue())", argsGo[0], argsGo[1]), nil
+			}
 		case operators.Modulo:
-			return fmt.Sprintf("runtime.Modulo(%s.DynValue(), %s.DynValue())", argsGo[0], argsGo[1]), nil
+			switch extractOverloadID(checkedExpr.GetReferenceMap()[node.GetId()].GetOverloadId()) {
+			case overloads.ModuloInt64:
+				return fmt.Sprintf("runtime.ModuloInt64(%s.IntValue(), %s.IntValue())", argsGo[0], argsGo[1]), nil
+			case overloads.ModuloUint64:
+				return fmt.Sprintf("runtime.ModuloUint64(%s.UintValue(), %s.UintValue())", argsGo[0], argsGo[1]), nil
+			default:
+				return fmt.Sprintf("runtime.Modulo(%s.DynValue(), %s.DynValue())", argsGo[0], argsGo[1]), nil
+			}
 		case operators.Negate:
-			return fmt.Sprintf("runtime.Negate(%s.DynValue())", argsGo[0]), nil
+			switch extractOverloadID(checkedExpr.GetReferenceMap()[node.GetId()].GetOverloadId()) {
+			case overloads.DivideInt64:
+				return fmt.Sprintf("runtime.NegateInt64(%s.IntValue())", argsGo[0]), nil
+			case overloads.NegateDouble:
+				return fmt.Sprintf("runtime.NegateDouble(%s.DoubleValue())", argsGo[0]), nil
+			default:
+				return fmt.Sprintf("runtime.Negate(%s.DynValue())", argsGo[0]), nil
+			}
 		case operators.Index:
 			return fmt.Sprintf("runtime.Index(%s.DynValue(), %s.DynValue())", argsGo[0], argsGo[1]), nil
 		case operators.NotStrictlyFalse:
@@ -428,7 +503,7 @@ func astToGoSource(node *expr.Expr, checkedExpr *expr.CheckedExpr) (string, erro
 		case "duration":
 			return fmt.Sprintf("runtime.Duration(%s.DynValue())", argsGo[0]), nil
 		case "dyn":
-			return argsGo[0], nil
+			return fmt.Sprintf("%s.DynValue()", argsGo[0]), nil
 		default:
 			return "", fmt.Errorf("unsupported function %q", exprKind.CallExpr.GetFunction())
 		}
