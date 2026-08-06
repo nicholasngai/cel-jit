@@ -1,6 +1,6 @@
 package runtime
 
-import _ "embed"
+import "embed"
 
 //go:embed runtime.go
-var Source string
+var Source embed.FS

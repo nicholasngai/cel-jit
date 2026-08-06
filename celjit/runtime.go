@@ -2,6 +2,7 @@ package celjit
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sync"
@@ -20,7 +21,7 @@ var writeRuntime = sync.OnceValues(func() (string, error) {
 
 	// Write Go module file.
 	if err := writeFilef(filepath.Join(dir, "go.mod"),
-`module github.com/nicholasngai/cel-jit/runtime-source/runtime
+`module github.com/nicholasngai/cel-jit/runtime-source
 
 go 1.26.0
 `); err != nil {
@@ -28,10 +29,25 @@ go 1.26.0
 	}
 
 	// Write the runtime to it.
-	if err := os.MkdirAll(filepath.Join(dir, "runtime"), 0o755); err != nil {
-		return "", fmt.Errorf("mkdir runtime: %w", err)
-	}
-	if err := writeFilef(filepath.Join(dir, "runtime.go"), "%s", runtime.Source); err != nil {
+	if err := fs.WalkDir(runtime.Source, ".", func(runtimePath string, dirEntry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if dirEntry.IsDir() {
+			if err := os.Mkdir(filepath.Join(dir, "runtime", runtimePath), 0o755); err != nil {
+				return fmt.Errorf("mkdir %s: %w", filepath.Join(dir, "runtime", runtimePath), err)
+			}
+		} else {
+			contents, err := runtime.Source.ReadFile(runtimePath)
+			if err != nil {
+				return fmt.Errorf("read embedded %s: %w", runtimePath, err)
+			}
+			if err := writeFilef(filepath.Join(dir, "runtime", runtimePath), "%s", string(contents)); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
 		return "", err
 	}
 

@@ -53,9 +53,9 @@ func Compile(config Config) ([]any, error) {
 
 go 1.26.0
 
-require github.com/nicholasngai/cel-jit/runtime-source/runtime v0.0.0-00000000000000-000000000000
+require github.com/nicholasngai/cel-jit/runtime-source v0.0.0-00000000000000-000000000000
 
-replace github.com/nicholasngai/cel-jit/runtime-source/runtime => %s
+replace github.com/nicholasngai/cel-jit/runtime-source => %s
 `,
 	runtimeDir); err != nil {
 		return nil, err
