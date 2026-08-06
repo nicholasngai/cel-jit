@@ -62,26 +62,26 @@ func LogicalNot(a BoolValue) BoolValue {
 	return BoolValue{Val: !a.Val}
 }
 
-func Equals(a, b DynValue) DynValue {
+func Equals(a, b DynValue) BoolValue {
 	if a.Err != nil {
-		return a
+		return BoolValue{Err: a.Err}
 	}
 	if b.Err != nil {
-		return b
+		return BoolValue{Err: b.Err}
 	}
 
-	return DynValue{Val: eq(a.Val, b.Val)}
+	return BoolValue{Val: eq(a.Val, b.Val)}
 }
 
-func NotEquals(a, b DynValue) DynValue {
+func NotEquals(a, b DynValue) BoolValue {
 	if a.Err != nil {
-		return a
+		return BoolValue{Err: a.Err}
 	}
 	if b.Err != nil {
-		return b
+		return BoolValue{Err: b.Err}
 	}
 
-	return DynValue{Val: !eq(a.Val, b.Val)}
+	return BoolValue{Val: !eq(a.Val, b.Val)}
 }
 
 func eq(a, b any) bool {
@@ -235,7 +235,7 @@ func eq(a, b any) bool {
 	return a == b
 }
 
-func Less(a, b DynValue) DynValue {
+func Less(a, b DynValue) BoolValue {
 	return compare(
 		a, b,
 		func(a, b int64) bool { return a < b },
@@ -249,7 +249,7 @@ func Less(a, b DynValue) DynValue {
 	)
 }
 
-func LessEquals(a, b DynValue) DynValue {
+func LessEquals(a, b DynValue) BoolValue {
 	return compare(
 		a, b,
 		func(a, b int64) bool { return a <= b },
@@ -263,7 +263,7 @@ func LessEquals(a, b DynValue) DynValue {
 	)
 }
 
-func Greater(a, b DynValue) DynValue {
+func Greater(a, b DynValue) BoolValue {
 	return compare(
 		a, b,
 		func(a, b int64) bool { return a > b },
@@ -277,7 +277,7 @@ func Greater(a, b DynValue) DynValue {
 	)
 }
 
-func GreaterEquals(a, b DynValue) DynValue {
+func GreaterEquals(a, b DynValue) BoolValue {
 	return compare(
 		a, b,
 		func(a, b int64) bool { return a >= b },
@@ -301,56 +301,56 @@ func compare(
 	cmpBytes func(a, b []byte) bool,
 	cmpTime func(a, b time.Time) bool,
 	cmpDuration func(a, b time.Duration) bool,
-) DynValue {
+) BoolValue {
 	if a.Err != nil {
-		return a
+		return BoolValue{Err: a.Err}
 	}
 	if b.Err != nil {
-		return b
+		return BoolValue{Err: b.Err}
 	}
 
 	aInt, aOk := a.Val.(int64)
 	bInt, bOk := b.Val.(int64)
 	if aOk && bOk {
-		return DynValue{Val: cmpInt(aInt, bInt)}
+		return BoolValue{Val: cmpInt(aInt, bInt)}
 	}
 	aUint, aOk := a.Val.(uint64)
 	bUint, bOk := b.Val.(uint64)
 	if aOk && bOk {
-		return DynValue{Val: cmpUint(aUint, bUint)}
+		return BoolValue{Val: cmpUint(aUint, bUint)}
 	}
 	aDouble, aOk := a.Val.(float64)
 	bDouble, bOk := b.Val.(float64)
 	if aOk && bOk {
-		return DynValue{Val: cmpDouble(aDouble, bDouble)}
+		return BoolValue{Val: cmpDouble(aDouble, bDouble)}
 	}
 	aBool, aOk := a.Val.(bool)
 	bBool, bOk := b.Val.(bool)
 	if aOk && bOk {
-		return DynValue{Val: cmpBool(aBool, bBool)}
+		return BoolValue{Val: cmpBool(aBool, bBool)}
 	}
 	aString, aOk := a.Val.(string)
 	bString, bOk := b.Val.(string)
 	if aOk && bOk {
-		return DynValue{Val: cmpString(aString, bString)}
+		return BoolValue{Val: cmpString(aString, bString)}
 	}
 	aBytes, aOk := a.Val.([]byte)
 	bBytes, bOk := b.Val.([]byte)
 	if aOk && bOk {
-		return DynValue{Val: cmpBytes(aBytes, bBytes)}
+		return BoolValue{Val: cmpBytes(aBytes, bBytes)}
 	}
 	aTime, aOk := a.Val.(time.Time)
 	bTime, bOk := b.Val.(time.Time)
 	if aOk && bOk {
-		return DynValue{Val: cmpTime(aTime, bTime)}
+		return BoolValue{Val: cmpTime(aTime, bTime)}
 	}
 	aDuration, aOk := a.Val.(time.Duration)
 	bDuration, bOk := b.Val.(time.Duration)
 	if aOk && bOk {
-		return DynValue{Val: cmpDuration(aDuration, bDuration)}
+		return BoolValue{Val: cmpDuration(aDuration, bDuration)}
 	}
 
-	return DynValue{Err: fmt.Errorf("incompatible types %T and %T", a.Val, b.Val)}
+	return BoolValue{Err: fmt.Errorf("incompatible types %T and %T", a.Val, b.Val)}
 }
 
 func Add(a, b DynValue) DynValue {
@@ -647,12 +647,8 @@ func Index(a, b DynValue) DynValue {
 	return DynValue{Err: fmt.Errorf("incompatible types %T and %T", a.Val, b.Val)}
 }
 
-func NotStrictlyFalse(a DynValue) DynValue {
-	if a.Err != nil {
-		return a
-	}
-
-	return DynValue{Val: a.Val != false}
+func NotStrictlyFalse(a BoolValue) BoolValue {
+	return a
 }
 
 func In(a, b DynValue) DynValue {

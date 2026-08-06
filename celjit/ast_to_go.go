@@ -404,7 +404,7 @@ func astToGoSource(node *expr.Expr, checkedExpr *expr.CheckedExpr) (string, erro
 		case operators.Index:
 			return fmt.Sprintf("runtime.Index(%s.DynValue(), %s.DynValue())", argsGo[0], argsGo[1]), nil
 		case operators.NotStrictlyFalse:
-			return fmt.Sprintf("runtime.NotStrictlyFalse(%s.DynValue())", argsGo[0]), nil
+			return fmt.Sprintf("runtime.NotStrictlyFalse(%s.BoolValue())", argsGo[0]), nil
 		case operators.In:
 			return fmt.Sprintf("runtime.In(%s.DynValue(), %s.DynValue())", argsGo[0], argsGo[1]), nil
 		case "size":
