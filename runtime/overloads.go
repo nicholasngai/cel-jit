@@ -3,6 +3,7 @@ package runtime
 import (
 	"bytes"
 	"errors"
+	"fmt"
 )
 
 func LessInt64(a, b IntValue) BoolValue {
@@ -809,4 +810,57 @@ func NegateDouble(a DoubleValue) DoubleValue {
 		return a
 	}
 	return DoubleValue{Val: -a.Val}
+}
+
+func IndexListInt[T any, Val any](a ListValue[T], b IntValue, makeVal func(T) Val, makeErr func(error) Val) Val {
+	if a.Err != nil {
+		return makeErr(a.Err)
+	}
+	if b.Err != nil {
+		return makeErr(b.Err)
+	}
+
+	// Check bounds.
+	if b.Val < 0 || b.Val >= int64(len(a.Val)) {
+		return makeErr(fmt.Errorf("index %d out of range", b.Val))
+	}
+
+	return makeVal(a.Val[b.Val])
+}
+
+func IndexListUint[T any, Val any](a ListValue[T], b UintValue, makeVal func(T) Val, makeErr func(error) Val) Val {
+	if a.Err != nil {
+		return makeErr(a.Err)
+	}
+	if b.Err != nil {
+		return makeErr(b.Err)
+	}
+
+	// Check bounds.
+	if b.Val >= uint64(len(a.Val)) {
+		return makeErr(fmt.Errorf("index %d out of range", b.Val))
+	}
+
+	return makeVal(a.Val[b.Val])
+}
+
+func IndexListDouble[T any, Val any](a ListValue[T], b DoubleValue, makeVal func(T) Val, makeErr func(error) Val) Val {
+	if a.Err != nil {
+		return makeErr(a.Err)
+	}
+	if b.Err != nil {
+		return makeErr(b.Err)
+	}
+
+	bInt := int(b.Val)
+	if float64(bInt) != b.Val {
+		return makeErr(fmt.Errorf("cannot index list with value %f", b.Val))
+	}
+
+	// Check bounds.
+	if bInt >= len(a.Val) {
+		return makeErr(fmt.Errorf("index %d out of range", bInt))
+	}
+
+	return makeVal(a.Val[bInt])
 }
