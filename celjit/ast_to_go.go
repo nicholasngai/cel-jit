@@ -58,7 +58,7 @@ func astToGoSource(node *expr.Expr, checkedExpr *expr.CheckedExpr) (string, erro
 		if listType.Kind() != cel.ListKind {
 			return "", fmt.Errorf("type info for node %d is %v, not list", node.GetId(), listType.Kind())
 		}
-		elemGoType, _, elemTypeConverter, err := celTypeToRuntimeTypes(listType.Parameters()[0])
+		elemTypeInfo, err := celTypeInfo(listType.Parameters()[0])
 		if err != nil {
 			return "", fmt.Errorf("elem type %v to runtime types: %w", listType.Parameters()[0], err)
 		}
@@ -66,7 +66,7 @@ func astToGoSource(node *expr.Expr, checkedExpr *expr.CheckedExpr) (string, erro
 		var builder strings.Builder
 		fmt.Fprintf(&builder, `(func() runtime.ListValue[%s] {
 			s := make([]%[1]s, %d)`,
-			elemGoType, len(exprKind.ListExpr.GetElements()),
+			elemTypeInfo.goType, len(exprKind.ListExpr.GetElements()),
 		)
 		for i, elem := range exprKind.ListExpr.GetElements() {
 			elemSource, err := astToGoSource(elem, checkedExpr)
@@ -80,13 +80,13 @@ func astToGoSource(node *expr.Expr, checkedExpr *expr.CheckedExpr) (string, erro
 				return runtime.ListValue[%[3]s]{Err: elem%[1]d.Err}
 			}
 			s[%[1]d] = elem%[1]d.Val`,
-				i, elemTypeConverter(elemSource), elemGoType,
+				i, elemTypeInfo.converter(elemSource), elemTypeInfo.goType,
 			)
 		}
 		fmt.Fprintf(&builder, `
 			return runtime.ListValue[%s]{Val: s}
 		})()`,
-			elemGoType,
+			elemTypeInfo.goType,
 		)
 		return builder.String(), nil
 	case *expr.Expr_StructExpr:
@@ -104,11 +104,11 @@ func astToGoSource(node *expr.Expr, checkedExpr *expr.CheckedExpr) (string, erro
 			if mapType.Kind() != cel.MapKind {
 				return "", fmt.Errorf("type info for node %d is %v, not map", node.GetId(), mapType.Kind())
 			}
-			keyGoType, _, keyTypeConverter, err := celTypeToRuntimeTypes(mapType.Parameters()[0])
+			keyTypeInfo, err := celTypeInfo(mapType.Parameters()[0])
 			if err != nil {
 				return "", fmt.Errorf("key type %v to runtime types: %w", mapType.Parameters()[0], err)
 			}
-			valGoType, _, valTypeConverter, err := celTypeToRuntimeTypes(mapType.Parameters()[1])
+			valTypeInfo, err := celTypeInfo(mapType.Parameters()[1])
 			if err != nil {
 				return "", fmt.Errorf("value type %v to runtime types: %w", mapType.Parameters()[1], err)
 			}
@@ -116,7 +116,7 @@ func astToGoSource(node *expr.Expr, checkedExpr *expr.CheckedExpr) (string, erro
 			var builder strings.Builder
 			fmt.Fprintf(&builder, `(func() runtime.MapValue[%s, %s] {
 				s := make(map[%[1]s]%[2]s, %d)`,
-				keyGoType, valGoType, len(exprKind.StructExpr.GetEntries()),
+				keyTypeInfo.goType, valTypeInfo.goType, len(exprKind.StructExpr.GetEntries()),
 			)
 			for i, entry := range exprKind.StructExpr.GetEntries() {
 				keySource, err := astToGoSource(entry.GetMapKey(), checkedExpr)
@@ -139,13 +139,13 @@ func astToGoSource(node *expr.Expr, checkedExpr *expr.CheckedExpr) (string, erro
 					return runtime.MapValue[%[4]s, %[5]s]{Err: val%[1]d.Err}
 				}
 				s[key%[1]d.Val] = val%[1]d.Val`,
-					i, keyTypeConverter(keySource), valTypeConverter(valSource), keyGoType, valGoType,
+					i, keyTypeInfo.converter(keySource), valTypeInfo.converter(valSource), keyTypeInfo.goType, valTypeInfo.goType,
 				)
 			}
 			fmt.Fprintf(&builder, `
 				return runtime.MapValue[%s, %s]{Val: s}
 			})()`,
-				keyGoType, valGoType,
+				keyTypeInfo.goType, valTypeInfo.goType,
 			)
 			return builder.String(), nil
 		} else {
@@ -317,7 +317,7 @@ func astToGoSource(node *expr.Expr, checkedExpr *expr.CheckedExpr) (string, erro
 			if err != nil {
 				return "", fmt.Errorf("expr type %v to CEL type", resExprType)
 			}
-			_, resRuntimeType, resTypeConverter, err := celTypeToRuntimeTypes(resType)
+			resTypeInfo, err := celTypeInfo(resType)
 			if err != nil {
 				return "", fmt.Errorf("result type %v to runtime types: %w", resType, err)
 			}
@@ -334,7 +334,7 @@ func astToGoSource(node *expr.Expr, checkedExpr *expr.CheckedExpr) (string, erro
 					return %[4]s
 				}
 			})()`,
-				resRuntimeType, argsGo[0], resTypeConverter(argsGo[1]), resTypeConverter(argsGo[2]),
+				resTypeInfo.runtimeType, argsGo[0], resTypeInfo.converter(argsGo[1]), resTypeInfo.converter(argsGo[2]),
 			), nil
 		case operators.LogicalAnd:
 			return fmt.Sprintf(`(func() runtime.BoolValue {
@@ -405,11 +405,11 @@ func astToGoSource(node *expr.Expr, checkedExpr *expr.CheckedExpr) (string, erro
 				if err != nil {
 					return "", fmt.Errorf("expr type %v to CEL type", listExprType)
 				}
-				_, _, listTypeConverter, err := celTypeToRuntimeTypes(listType)
+				listTypeInfo, err := celTypeInfo(listType)
 				if err != nil {
 					return "", fmt.Errorf("elem type %v to runtime types: %w", listType, err)
 				}
-				return fmt.Sprintf("runtime.AddList(%s, %s)", listTypeConverter(argsGo[0]), listTypeConverter(argsGo[1])), nil
+				return fmt.Sprintf("runtime.AddList(%s, %s)", listTypeInfo.converter(argsGo[0]), listTypeInfo.converter(argsGo[1])), nil
 			case overloads.AddTimestampDuration:
 				return fmt.Sprintf("runtime.AddTimestampDuration(%s.TimestampValue(), %s.DurationValue())", argsGo[0], argsGo[1]), nil
 			case overloads.AddDurationTimestamp:

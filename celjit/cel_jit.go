@@ -30,55 +30,108 @@ type Parameter struct {
 	Type *cel.Type
 }
 
-// celTypeToRuntimeTypes maps CEL types to their JIT runtime types.
-func celTypeToRuntimeTypes(t *cel.Type) (
-	goType string,
-	runtimeType string,
-	converter func(string) string,
-	_ error,
-) {
+type runtimeTypeInfo struct {
+	goType      string
+	runtimeType string
+	converter   func(string) string
+}
+
+// celTypeInfo maps CEL types to their JIT runtime types.
+func celTypeInfo(t *cel.Type) (runtimeTypeInfo, error) {
 	switch t.Kind() {
 	case cel.ListKind:
-		elemGoType, _, _, err := celTypeToRuntimeTypes(t.Parameters()[0])
+		elemTypeInfo, err := celTypeInfo(t.Parameters()[0])
 		if err != nil {
-			return "", "", nil, fmt.Errorf("list[0]: %w", err)
+			return runtimeTypeInfo{}, fmt.Errorf("list[0]: %w", err)
 		}
-		return fmt.Sprintf("[]%s", elemGoType), fmt.Sprintf("runtime.ListValue[%s]", elemGoType), func(s string) string { return fmt.Sprintf("runtime.ToListValue[%s](%s)", elemGoType, s) }, nil
+		return runtimeTypeInfo{
+			goType:      fmt.Sprintf("[]%s", elemTypeInfo.goType),
+			runtimeType: fmt.Sprintf("runtime.ListValue[%s]", elemTypeInfo.goType),
+			converter: func(s string) string {
+				return fmt.Sprintf("runtime.ToListValue[%s](%s)", elemTypeInfo.goType, s)
+			},
+		}, nil
 	case cel.MapKind:
-		keyGoType, _, _, err := celTypeToRuntimeTypes(t.Parameters()[0])
+		keyTypeInfo, err := celTypeInfo(t.Parameters()[0])
 		if err != nil {
-			return "", "", nil, fmt.Errorf("map[0]: %w", err)
+			return runtimeTypeInfo{}, fmt.Errorf("map[0]: %w", err)
 		}
-		valGoType, _, _, err := celTypeToRuntimeTypes(t.Parameters()[1])
+		valTypeInfo, err := celTypeInfo(t.Parameters()[1])
 		if err != nil {
-			return "", "", nil, fmt.Errorf("map[1]: %w", err)
+			return runtimeTypeInfo{}, fmt.Errorf("map[1]: %w", err)
 		}
-		return fmt.Sprintf("map[%s]%s", keyGoType, valGoType), fmt.Sprintf("runtime.MapValue[%s, %s]", keyGoType, valGoType), func(s string) string { return fmt.Sprintf("runtime.ToMapValue[%s, %s](%s)", keyGoType, valGoType, s) }, nil
+		return runtimeTypeInfo{
+			goType:      fmt.Sprintf("map[%s]%s", keyTypeInfo.goType, valTypeInfo.goType),
+			runtimeType: fmt.Sprintf("runtime.MapValue[%s, %s]", keyTypeInfo.goType, valTypeInfo.goType),
+			converter: func(s string) string {
+				return fmt.Sprintf("runtime.ToMapValue[%s, %s](%s)", keyTypeInfo.goType, valTypeInfo.goType, s)
+			},
+		}, nil
 	}
 
 	switch t {
 	case cel.DynType:
-		return "any", "runtime.DynValue", func(s string) string { return fmt.Sprintf("%s.DynValue()", s) }, nil
+		return runtimeTypeInfo{
+			goType:      "any",
+			runtimeType: "runtime.DynValue",
+			converter:   func(s string) string { return fmt.Sprintf("%s.DynValue()", s) },
+		}, nil
 	case cel.IntType:
-		return "int64", "runtime.IntValue", func(s string) string { return fmt.Sprintf("%s.IntValue()", s) }, nil
+		return runtimeTypeInfo{
+			goType:      "int64",
+			runtimeType: "runtime.IntValue",
+			converter:   func(s string) string { return fmt.Sprintf("%s.IntValue()", s) },
+		}, nil
 	case cel.UintType:
-		return "uint64", "runtime.UintValue", func(s string) string { return fmt.Sprintf("%s.UintValue()", s) }, nil
+		return runtimeTypeInfo{
+			goType:      "uint64",
+			runtimeType: "runtime.UintValue",
+			converter:   func(s string) string { return fmt.Sprintf("%s.UintValue()", s) },
+		}, nil
 	case cel.DoubleType:
-		return "float64", "runtime.DoubleValue", func(s string) string { return fmt.Sprintf("%s.DoubleValue()", s) }, nil
+		return runtimeTypeInfo{
+			goType:      "float64",
+			runtimeType: "runtime.DoubleValue",
+			converter:   func(s string) string { return fmt.Sprintf("%s.DoubleValue()", s) },
+		}, nil
 	case cel.BoolType:
-		return "bool", "runtime.BoolValue", func(s string) string { return fmt.Sprintf("%s.BoolValue()", s) }, nil
+		return runtimeTypeInfo{
+			goType:      "bool",
+			runtimeType: "runtime.BoolValue",
+			converter:   func(s string) string { return fmt.Sprintf("%s.BoolValue()", s) },
+		}, nil
 	case cel.StringType:
-		return "string", "runtime.StringValue", func(s string) string { return fmt.Sprintf("%s.StringValue()", s) }, nil
+		return runtimeTypeInfo{
+			goType:      "string",
+			runtimeType: "runtime.StringValue",
+			converter:   func(s string) string { return fmt.Sprintf("%s.StringValue()", s) },
+		}, nil
 	case cel.BytesType:
-		return "[]byte", "runtime.BytesValue", func(s string) string { return fmt.Sprintf("%s.BytesValue()", s) }, nil
+		return runtimeTypeInfo{
+			goType:      "[]byte",
+			runtimeType: "runtime.BytesValue",
+			converter:   func(s string) string { return fmt.Sprintf("%s.BytesValue()", s) },
+		}, nil
 	case cel.TimestampType:
-		return "time.Time", "runtime.TimestampValue", func(s string) string { return fmt.Sprintf("%s.TimestampValue()", s) }, nil
+		return runtimeTypeInfo{
+			goType:      "time.Time",
+			runtimeType: "runtime.TimestampValue",
+			converter:   func(s string) string { return fmt.Sprintf("%s.TimestampValue()", s) },
+		}, nil
 	case cel.DurationType:
-		return "time.Duration", "runtime.DurationValue", func(s string) string { return fmt.Sprintf("%s.DurationValue()", s) }, nil
+		return runtimeTypeInfo{
+			goType:      "time.Duration",
+			runtimeType: "runtime.DurationValue",
+			converter:   func(s string) string { return fmt.Sprintf("%s.DurationValue()", s) },
+		}, nil
 	case cel.NullType:
-		return "struct{}", "runtime.NullValue", func(s string) string { return fmt.Sprintf("%s.NullValue()", s) }, nil
+		return runtimeTypeInfo{
+			goType:      "struct{}",
+			runtimeType: "runtime.NullValue",
+			converter:   func(s string) string { return fmt.Sprintf("%s.NullValue()", s) },
+		}, nil
 	default:
-		return "", "", nil, fmt.Errorf("unhandled type %v", t)
+		return runtimeTypeInfo{}, fmt.Errorf("unhandled type %v", t)
 	}
 }
 
@@ -184,23 +237,21 @@ var (
 
 		// Get runtime types.
 		type runtimeParameter struct {
-			parameter   Parameter
-			goType      string
-			runtimeType string
+			parameter Parameter
+			typeInfo  runtimeTypeInfo
 		}
 		runtimeParameters := make([]runtimeParameter, 0, len(exprConfig.Parameters))
 		for _, parameter := range exprConfig.Parameters {
-			goType, runtimeType, _, err := celTypeToRuntimeTypes(parameter.Type)
+			paramTypeInfo, err := celTypeInfo(parameter.Type)
 			if err != nil {
 				return nil, fmt.Errorf("%q: parameter %q type: %w", exprConfig.Expr, parameter.Name, err)
 			}
 			runtimeParameters = append(runtimeParameters, runtimeParameter{
-				parameter:   parameter,
-				goType:      goType,
-				runtimeType: runtimeType,
+				parameter: parameter,
+				typeInfo:  paramTypeInfo,
 			})
 		}
-		returnGoType, returnRuntimeType, returnTypeConverter, err := celTypeToRuntimeTypes(exprConfig.ReturnType)
+		returnTypeInfo, err := celTypeInfo(exprConfig.ReturnType)
 		if err != nil {
 			return nil, fmt.Errorf("%q: return type: %w", exprConfig.Expr, err)
 		}
@@ -219,17 +270,17 @@ func program%[1]d(%[5]s) %s {
 `,
 			i,
 			repeat("%s %s", runtimeParameters, func(r runtimeParameter) []any {
-				return []any{mangleParameter(r.parameter.Name), r.goType}
+				return []any{mangleParameter(r.parameter.Name), r.typeInfo.goType}
 			}),
-			returnGoType,
+			returnTypeInfo.goType,
 			repeat("%s{Val: %s}", runtimeParameters, func(r runtimeParameter) []any {
-				return []any{r.runtimeType, mangleParameter(r.parameter.Name)}
+				return []any{r.typeInfo.runtimeType, mangleParameter(r.parameter.Name)}
 			}),
 			repeat("%s %s", runtimeParameters, func(r runtimeParameter) []any {
-				return []any{mangleVariable(r.parameter.Name), r.runtimeType}
+				return []any{mangleVariable(r.parameter.Name), r.typeInfo.runtimeType}
 			}),
-			returnRuntimeType,
-			returnTypeConverter(goSource),
+			returnTypeInfo.runtimeType,
+			returnTypeInfo.converter(goSource),
 		); err != nil {
 			return nil, err
 		}
