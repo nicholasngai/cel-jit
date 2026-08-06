@@ -3,6 +3,7 @@ package runtime
 import (
 	"fmt"
 	"iter"
+	"reflect"
 	"time"
 )
 
@@ -138,6 +139,107 @@ func (v DynValue) NullValue() NullValue {
 	}
 
 	return NullValue{}
+}
+
+func ToListValue[T any](v DynValue) ListValue[T] {
+	if v.err != nil {
+		return ListValue[T]{err: v.err}
+	}
+
+	if vList, ok := v.v.([]T); ok {
+		return ListValue[T]{v: vList}
+	}
+
+	listVal, err := toSlice(reflect.ValueOf(v.v), reflect.TypeFor[T]())
+	if err != nil {
+		return ListValue[T]{err: err}
+	}
+
+	return ListValueOf(listVal.Interface().([]T))
+}
+
+func toSlice(v reflect.Value, elemType reflect.Type) (reflect.Value, error) {
+	if v.Type() == reflect.SliceOf(elemType) {
+		return v, nil
+	}
+
+	if v.Kind() != reflect.Slice {
+		return reflect.Value{}, fmt.Errorf("%v is not a list", v)
+	}
+
+	result := reflect.MakeSlice(reflect.SliceOf(elemType), v.Len(), v.Len())
+	for i := range v.Len() {
+		elem := v.Index(i)
+		if elem.Kind() == reflect.Interface {
+			elem = elem.Elem()
+		}
+		if !elem.Type().AssignableTo(elemType) {
+			if elemType.Kind() == reflect.Slice {
+				sliceElem, err := toSlice(elem, elemType.Elem())
+				if err != nil {
+					return reflect.Value{}, fmt.Errorf("element %d: %w", i, err)
+				}
+				elem = sliceElem
+			} else if elemType.Kind() == reflect.Map {
+				mapElem, err := toMap(elem, elemType.Key(), elemType.Elem())
+				if err != nil {
+					return reflect.Value{}, fmt.Errorf("element %v: %w", i, err)
+				}
+				elem = mapElem
+			} else {
+				return reflect.Value{}, fmt.Errorf("element %d: %v is not a %v", i, elem, elemType)
+			}
+		}
+		result.Index(i).Set(elem)
+	}
+
+	return result, nil
+}
+
+func toMap(v reflect.Value, keyType reflect.Type, valueType reflect.Type) (reflect.Value, error) {
+	if v.Type() == reflect.MapOf(keyType, valueType) {
+		return v, nil
+	}
+
+	if v.Kind() != reflect.Map {
+		return reflect.Value{}, fmt.Errorf("%v is not a map", v)
+	}
+
+	result := reflect.MakeMap(reflect.MapOf(keyType, valueType))
+	mapIter := v.MapRange()
+	for mapIter.Next() {
+		key := mapIter.Key()
+		if key.Kind() == reflect.Interface {
+			key = key.Elem()
+		}
+		if !key.Type().AssignableTo(keyType) {
+			return reflect.Value{}, fmt.Errorf("key %v is not a %v", key, keyType)
+		}
+		value := mapIter.Value()
+		if value.Kind() == reflect.Interface {
+			value = value.Elem()
+		}
+		if !value.Type().AssignableTo(valueType) {
+			if valueType.Kind() == reflect.Slice {
+				sliceValue, err := toSlice(value, valueType.Elem())
+				if err != nil {
+					return reflect.Value{}, fmt.Errorf("key %v: %w", key, err)
+				}
+				value = sliceValue
+			} else if valueType.Kind() == reflect.Map {
+				mapValue, err := toMap(value, valueType.Key(), valueType.Elem())
+				if err != nil {
+					return reflect.Value{}, fmt.Errorf("key %v: %w", key, err)
+				}
+				value = mapValue
+			} else {
+				return reflect.Value{}, fmt.Errorf("key %v: %v is not a %v", key, value, valueType)
+			}
+		}
+		result.SetMapIndex(key, value)
+	}
+
+	return result, nil
 }
 
 // DynValueOf returns a [DynValue] for the given value.
@@ -434,4 +536,29 @@ func (v NullValue) DynValue() DynValue {
 
 func (v NullValue) NullValue() NullValue {
 	return v
+}
+
+// ListValue represents a statically typed list value.
+type ListValue[T any] struct {
+	v   []T
+	err error
+}
+
+func (v ListValue[T]) Val() []T {
+	return v.v
+}
+
+func (v ListValue[T]) Err() error {
+	return v.err
+}
+
+func (v ListValue[T]) DynValue() DynValue {
+	if v.err != nil {
+		return DynValue{err: v.err}
+	}
+	return DynValue{v: v.v}
+}
+
+func ListValueOf[T any](v []T) ListValue[T] {
+	return ListValue[T]{v: v}
 }
