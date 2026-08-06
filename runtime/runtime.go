@@ -198,6 +198,10 @@ func eq(a, b any) bool {
 		if b, ok := b.([]time.Time); ok {
 			return slices.EqualFunc(a, b, time.Time.Equal)
 		}
+	case []struct{}:
+		if b, ok := b.([]time.Time); ok {
+			return len(a) == len(b)
+		}
 	}
 
 	// Slice equality.
