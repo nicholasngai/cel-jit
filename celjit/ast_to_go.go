@@ -60,7 +60,7 @@ func astToGoSource(node *expr.Expr, checkedExpr *expr.CheckedExpr) (string, erro
 		}
 		elemGoType, _, elemTypeConverter, err := celTypeToRuntimeTypes(listType.Parameters()[0])
 		if err != nil {
-			return "", fmt.Errorf("type %v to runtime types: %w", listType.Parameters()[0], err)
+			return "", fmt.Errorf("elem type %v to runtime types: %w", listType.Parameters()[0], err)
 		}
 
 		var builder strings.Builder
@@ -79,8 +79,8 @@ func astToGoSource(node *expr.Expr, checkedExpr *expr.CheckedExpr) (string, erro
 			if elem%[1]d.Err != nil {
 				return runtime.ListValue[%[3]s]{Err: elem%[1]d.Err}
 			}
-			s[%[1]d] = %[4]s.Val`,
-				i, elemSource, elemGoType, elemTypeConverter(fmt.Sprintf("elem%d", i)),
+			s[%[1]d] = elem%[1]d.Val`,
+				i, elemTypeConverter(elemSource), elemGoType,
 			)
 		}
 		fmt.Fprintf(&builder, `
@@ -92,10 +92,31 @@ func astToGoSource(node *expr.Expr, checkedExpr *expr.CheckedExpr) (string, erro
 	case *expr.Expr_StructExpr:
 		if exprKind.StructExpr.MessageName == "" {
 			// Map.
+
+			mapExprType, ok := checkedExpr.GetTypeMap()[node.GetId()]
+			if !ok {
+				return "", fmt.Errorf("no type info for node %d", node.GetId())
+			}
+			mapType, err := cel.ExprTypeToType(mapExprType)
+			if err != nil {
+				return "", fmt.Errorf("expr type %v to CEL type", mapExprType)
+			}
+			if mapType.Kind() != cel.MapKind {
+				return "", fmt.Errorf("type info for node %d is %v, not map", node.GetId(), mapType.Kind())
+			}
+			keyGoType, _, keyTypeConverter, err := celTypeToRuntimeTypes(mapType.Parameters()[0])
+			if err != nil {
+				return "", fmt.Errorf("key type %v to runtime types: %w", mapType.Parameters()[0], err)
+			}
+			valGoType, _, valTypeConverter, err := celTypeToRuntimeTypes(mapType.Parameters()[1])
+			if err != nil {
+				return "", fmt.Errorf("value type %v to runtime types: %w", mapType.Parameters()[1], err)
+			}
+
 			var builder strings.Builder
-			fmt.Fprintf(&builder, `(func() runtime.DynValue {
-				s := make(map[any]any, %d)`,
-				len(exprKind.StructExpr.GetEntries()),
+			fmt.Fprintf(&builder, `(func() runtime.MapValue[%s, %s] {
+				s := make(map[%[1]s]%[2]s, %d)`,
+				keyGoType, valGoType, len(exprKind.StructExpr.GetEntries()),
 			)
 			for i, entry := range exprKind.StructExpr.GetEntries() {
 				keySource, err := astToGoSource(entry.GetMapKey(), checkedExpr)
@@ -111,19 +132,21 @@ func astToGoSource(node *expr.Expr, checkedExpr *expr.CheckedExpr) (string, erro
 				fmt.Fprintf(&builder, `
 				key%d := %s
 				if key%[1]d.Err != nil {
-					return key%[1]d.DynValue()
+					return runtime.MapValue[%[4]s, %[5]s]{Err: key%[1]d.Err}
 				}
 				val%[1]d := %[3]s
 				if val%[1]d.Err != nil {
-					return val%[1]d.DynValue()
+					return runtime.MapValue[%[4]s, %[5]s]{Err: val%[1]d.Err}
 				}
 				s[key%[1]d.Val] = val%[1]d.Val`,
-					i, keySource, valSource,
+					i, keyTypeConverter(keySource), valTypeConverter(valSource), keyGoType, valGoType,
 				)
 			}
-			builder.WriteString(`
-				return runtime.DynValue{Val: s}
-			})()`)
+			fmt.Fprintf(&builder, `
+				return runtime.MapValue[%s, %s]{Val: s}
+			})()`,
+				keyGoType, valGoType,
+			)
 			return builder.String(), nil
 		} else {
 			// Message.

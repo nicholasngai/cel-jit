@@ -25,7 +25,7 @@ var tests = []struct {
 	{"NullLiteral", "null", nil, nil, nil, cel.NullType},
 	{"ListLiteral", "[1, 2, 3]", nil, nil, nil, cel.ListType(cel.IntType)},
 	{"ListLiteralNested", "[[], [[], []]]", nil, nil, nil, cel.ListType(cel.ListType(cel.ListType(cel.DynType)))},
-	{"MapLiteral", "{\"foo\": 1, \"bar\": 2}", nil, nil, nil, cel.DynType},
+	{"MapLiteral", "{\"foo\": 1, \"bar\": 2}", nil, nil, nil, cel.MapType(cel.StringType, cel.IntType)},
 	{"Select", "{\"foo\": 1}.foo", nil, nil, nil, cel.IntType},
 	{"SelectMissing", "{\"foo\": 1}.bar", nil, nil, nil, cel.IntType},
 	{"SelectNull", "{\"foo\": null}.foo", nil, nil, nil, cel.NullType},
@@ -43,11 +43,11 @@ var tests = []struct {
 	{"ExistsOne", "[1, 2, 3].exists_one(x, x == 1)", nil, nil, nil, cel.BoolType},
 	{"ExistsOneMap", "{\"foo\": 1, \"bar\": 2}.exists_one(x, x == \"foo\")", nil, nil, nil, cel.BoolType},
 	{"Map", "[1, 2, 3].map(x, x + 1)", nil, nil, nil, cel.ListType(cel.IntType)},
-	{"MapMap", "{\"foo\": 1}.map(x, x + \"_test\")", nil, nil, nil, cel.DynType},
+	{"MapMap", "{\"foo\": 1}.map(x, x + \"_test\")", nil, nil, nil, cel.ListType(cel.StringType)},
 	{"MapFilter", "[1, 2, 3].map(x, x == 1, x + 1)", nil, nil, nil, cel.ListType(cel.IntType)},
-	{"MapFilterMap", "{\"foo\": 1, \"bar\": 2}.map(x, x == \"foo\", x + \"_test\")", nil, nil, nil, cel.DynType},
+	{"MapFilterMap", "{\"foo\": 1, \"bar\": 2}.map(x, x == \"foo\", x + \"_test\")", nil, nil, nil, cel.ListType(cel.StringType)},
 	{"Filter", "[1, 2, 3].filter(x, x == 1)", nil, nil, nil, cel.ListType(cel.IntType)},
-	{"FilterMap", "{\"foo\": 1, \"bar\": 2}.filter(x, x == \"foo\")", nil, nil, nil, cel.DynType},
+	{"FilterMap", "{\"foo\": 1, \"bar\": 2}.filter(x, x == \"foo\")", nil, nil, nil, cel.ListType(cel.StringType)},
 	{"ConditionalTrue", "true ? 1 : 2", nil, nil, nil, cel.IntType},
 	{"ConditionalFalse", "true ? 1 : 2", nil, nil, nil, cel.IntType},
 	{"ConditionalErrorTrue", "true ? {\"foobar\": 1}.error : 2", nil, nil, nil, cel.IntType},
@@ -200,8 +200,8 @@ func TestConformance(t *testing.T) {
 				cel.EagerlyValidateDeclarations(true),
 				cel.ExtendedValidations(),
 			)
-			for _, paramName := range test.paramNames {
-				envOpts = append(envOpts, cel.Variable(paramName, cel.DynType))
+			for j, paramName := range test.paramNames {
+				envOpts = append(envOpts, cel.Variable(paramName, test.paramTypes[j]))
 			}
 			env, err := cel.NewEnv(envOpts...)
 			if err != nil {
@@ -365,6 +365,10 @@ func BenchmarkJIT(b *testing.B) {
 					_, _ = f()
 				}
 			case func() ([]string, error):
+				for b.Loop() {
+					_, _ = f()
+				}
+			case func() (map[string]int64, error):
 				for b.Loop() {
 					_, _ = f()
 				}

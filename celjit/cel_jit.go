@@ -37,12 +37,23 @@ func celTypeToRuntimeTypes(t *cel.Type) (
 	converter func(string) string,
 	_ error,
 ) {
-	if t.Kind() == cel.ListKind {
+	switch t.Kind() {
+	case cel.ListKind:
 		elemGoType, _, _, err := celTypeToRuntimeTypes(t.Parameters()[0])
 		if err != nil {
 			return "", "", nil, fmt.Errorf("list[0]: %w", err)
 		}
 		return fmt.Sprintf("[]%s", elemGoType), fmt.Sprintf("ListValue[%s]", elemGoType), func(s string) string { return fmt.Sprintf("runtime.ToListValue[%s](%s)", elemGoType, s) }, nil
+	case cel.MapKind:
+		keyGoType, _, _, err := celTypeToRuntimeTypes(t.Parameters()[0])
+		if err != nil {
+			return "", "", nil, fmt.Errorf("map[0]: %w", err)
+		}
+		valGoType, _, _, err := celTypeToRuntimeTypes(t.Parameters()[1])
+		if err != nil {
+			return "", "", nil, fmt.Errorf("map[1]: %w", err)
+		}
+		return fmt.Sprintf("map[%s]%s", keyGoType, valGoType), fmt.Sprintf("MapValue[%s, %s]", keyGoType, valGoType), func(s string) string { return fmt.Sprintf("runtime.ToMapValue[%s, %s](%s)", keyGoType, valGoType, s) }, nil
 	}
 
 	switch t {

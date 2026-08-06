@@ -132,7 +132,7 @@ func (v DynValue) NullValue() NullValue {
 	return NullValue{}
 }
 
-func ToListValue[T any, V DynValue | ListValue[T]](v V) ListValue[T] {
+func ToListValue[T any, Val DynValue | ListValue[T]](v Val) ListValue[T] {
 	switch v := any(v).(type) {
 	case ListValue[T]:
 		return v
@@ -151,6 +151,30 @@ func ToListValue[T any, V DynValue | ListValue[T]](v V) ListValue[T] {
 		}
 
 		return ListValue[T]{Val: listVal.Interface().([]T)}
+	default:
+		panic("unreachable")
+	}
+}
+
+func ToMapValue[K comparable, V any, Val DynValue | MapValue[K, V]](v Val) MapValue[K, V] {
+	switch v := any(v).(type) {
+	case MapValue[K, V]:
+		return v
+	case DynValue:
+		if v.Err != nil {
+			return MapValue[K, V]{Err: v.Err}
+		}
+
+		if vMap, ok := v.Val.(map[K]V); ok {
+			return MapValue[K, V]{Val: vMap}
+		}
+
+		listVal, err := toMap(reflect.ValueOf(v.Val), reflect.TypeFor[K](), reflect.TypeFor[V]())
+		if err != nil {
+			return MapValue[K, V]{Err: err}
+		}
+
+		return MapValue[K, V]{Val: listVal.Interface().(map[K]V)}
 	default:
 		panic("unreachable")
 	}
@@ -400,6 +424,19 @@ type ListValue[T any] struct {
 }
 
 func (v ListValue[T]) DynValue() DynValue {
+	if v.Err != nil {
+		return DynValue{Err: v.Err}
+	}
+	return DynValue{Val: v.Val}
+}
+
+// ListValue represents a statically typed map value.
+type MapValue[K comparable, V any] struct {
+	Val map[K]V
+	Err error
+}
+
+func (v MapValue[K, V]) DynValue() DynValue {
 	if v.Err != nil {
 		return DynValue{Err: v.Err}
 	}

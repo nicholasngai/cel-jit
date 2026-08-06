@@ -26,6 +26,10 @@ func Select(a DynValue, fieldName string) DynValue {
 		return DynValue{Err: errors.New("not a map")}
 	}
 
+	if !reflect.TypeFor[string]().AssignableTo(aVal.Type().Key()) {
+		return DynValue{Err: fmt.Errorf("no such key %q", fieldName)}
+	}
+
 	elemVal := aVal.MapIndex(reflect.ValueOf(fieldName))
 	if !elemVal.IsValid() {
 		return DynValue{Err: fmt.Errorf("no such key %q", fieldName)}
@@ -41,6 +45,10 @@ func Has(a DynValue, fieldName string) DynValue {
 
 	aVal := reflect.ValueOf(a.Val)
 	if aVal.Type().Kind() != reflect.Map {
+		return DynValue{Val: false}
+	}
+
+	if !reflect.TypeFor[string]().AssignableTo(aVal.Type().Key()) {
 		return DynValue{Val: false}
 	}
 
@@ -232,11 +240,13 @@ func eq(a, b any) bool {
 		}
 
 		for aMapIter := aVal.MapRange(); aMapIter.Next(); {
-			bElemVal := bVal.MapIndex(aMapIter.Key())
-			if bElemVal.IsValid() {
-				// Found the element. Check if it's equal.
-				if !eq(aMapIter.Value().Interface(), bElemVal.Interface()) {
-					return false
+			if aType.Key().AssignableTo(bType.Key()) {
+				bElemVal := bVal.MapIndex(aMapIter.Key())
+				if bElemVal.IsValid() {
+					// Found the element. Check if it's equal.
+					if !eq(aMapIter.Value().Interface(), bElemVal.Interface()) {
+						return false
+					}
 				}
 			}
 
@@ -645,8 +655,10 @@ func Index(a, b DynValue) DynValue {
 
 	case reflect.Map:
 		bVal := reflect.ValueOf(b.Val)
-		if elemVal := aVal.MapIndex(bVal); elemVal.IsValid() {
-			return DynValue{Val: elemVal.Interface()}
+		if bVal.Type().AssignableTo(aVal.Type().Key()) {
+			if elemVal := aVal.MapIndex(bVal); elemVal.IsValid() {
+				return DynValue{Val: elemVal.Interface()}
+			}
 		}
 
 		// We didn't find the element. See if we need to do a scan for numeric
@@ -704,8 +716,10 @@ func In(a, b DynValue) DynValue {
 		return DynValue{Val: false}
 
 	case reflect.Map:
-		if bVal.MapIndex(aVal).IsValid() {
-			return DynValue{Val: true}
+		if aVal.Type().AssignableTo(bType.Key()) {
+			if bVal.MapIndex(aVal).IsValid() {
+				return DynValue{Val: true}
+			}
 		}
 
 		// We didn't find the element. See if we need to do a scan for numeric
