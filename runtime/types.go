@@ -8,16 +8,8 @@ import (
 
 // DynValue represents a dynamically typed runtime value.
 type DynValue struct {
-	v   any
-	err error
-}
-
-func (v DynValue) Val() any {
-	return v.v
-}
-
-func (v DynValue) Err() error {
-	return v.err
+	Val any
+	Err error
 }
 
 func (v DynValue) DynValue() DynValue {
@@ -25,136 +17,136 @@ func (v DynValue) DynValue() DynValue {
 }
 
 func (v DynValue) IntValue() IntValue {
-	if v.err != nil {
-		return IntValue{err: v.err}
+	if v.Err != nil {
+		return IntValue{Err: v.Err}
 	}
 
-	intVal, ok := v.v.(int64)
+	intVal, ok := v.Val.(int64)
 	if !ok {
-		return IntValue{err: fmt.Errorf("%v is not an int", v.v)}
+		return IntValue{Err: fmt.Errorf("%v is not an int", v.Val)}
 	}
 
-	return IntValueOf(intVal)
+	return IntValue{Val: intVal}
 }
 
 func (v DynValue) UintValue() UintValue {
-	if v.err != nil {
-		return UintValue{err: v.err}
+	if v.Err != nil {
+		return UintValue{Err: v.Err}
 	}
 
-	uintVal, ok := v.v.(uint64)
+	uintVal, ok := v.Val.(uint64)
 	if !ok {
-		return UintValue{err: fmt.Errorf("%v is not a uint", v.v)}
+		return UintValue{Err: fmt.Errorf("%v is not a uint", v.Val)}
 	}
 
-	return UintValueOf(uintVal)
+	return UintValue{Val: uintVal}
 }
 
 func (v DynValue) DoubleValue() DoubleValue {
-	if v.err != nil {
-		return DoubleValue{err: v.err}
+	if v.Err != nil {
+		return DoubleValue{Err: v.Err}
 	}
 
-	doubleVal, ok := v.v.(float64)
+	doubleVal, ok := v.Val.(float64)
 	if !ok {
-		return DoubleValue{err: fmt.Errorf("%v is not a double", v.v)}
+		return DoubleValue{Err: fmt.Errorf("%v is not a double", v.Val)}
 	}
 
-	return DoubleValueOf(doubleVal)
+	return DoubleValue{Val: doubleVal}
 }
 
 func (v DynValue) BoolValue() BoolValue {
-	if v.err != nil {
-		return BoolValue{err: v.err}
+	if v.Err != nil {
+		return BoolValue{Err: v.Err}
 	}
 
-	boolVal, ok := v.v.(bool)
+	boolVal, ok := v.Val.(bool)
 	if !ok {
-		return BoolValue{err: fmt.Errorf("%v is not a bool", v.v)}
+		return BoolValue{Err: fmt.Errorf("%v is not a bool", v.Val)}
 	}
 
-	return BoolValueOf(boolVal)
+	return BoolValue{Val: boolVal}
 }
 
 func (v DynValue) StringValue() StringValue {
-	if v.err != nil {
-		return StringValue{err: v.err}
+	if v.Err != nil {
+		return StringValue{Err: v.Err}
 	}
 
-	stringVal, ok := v.v.(string)
+	stringVal, ok := v.Val.(string)
 	if !ok {
-		return StringValue{err: fmt.Errorf("%v is not a string", v.v)}
+		return StringValue{Err: fmt.Errorf("%v is not a string", v.Val)}
 	}
 
-	return StringValueOf(stringVal)
+	return StringValue{Val: stringVal}
 }
 
 func (v DynValue) BytesValue() BytesValue {
-	if v.err != nil {
-		return BytesValue{err: v.err}
+	if v.Err != nil {
+		return BytesValue{Err: v.Err}
 	}
 
-	bytesVal, ok := v.v.([]byte)
+	bytesVal, ok := v.Val.([]byte)
 	if !ok {
-		return BytesValue{err: fmt.Errorf("%v is not a bytes", v.v)}
+		return BytesValue{Err: fmt.Errorf("%v is not a bytes", v.Val)}
 	}
 
-	return BytesValueOf(bytesVal)
+	return BytesValue{Val: bytesVal}
 }
 
 func (v DynValue) TimestampValue() TimestampValue {
-	if v.err != nil {
-		return TimestampValue{err: v.err}
+	if v.Err != nil {
+		return TimestampValue{Err: v.Err}
 	}
 
-	timestampVal, ok := v.v.(time.Time)
+	timestampVal, ok := v.Val.(time.Time)
 	if !ok {
-		return TimestampValue{err: fmt.Errorf("%v is not a timestamp", v.v)}
+		return TimestampValue{Err: fmt.Errorf("%v is not a timestamp", v.Val)}
 	}
 
-	return TimestampValueOf(timestampVal)
+	return TimestampValue{Val: timestampVal}
 }
 
 func (v DynValue) DurationValue() DurationValue {
-	if v.err != nil {
-		return DurationValue{err: v.err}
+	if v.Err != nil {
+		return DurationValue{Err: v.Err}
 	}
 
-	durationVal, ok := v.v.(time.Duration)
+	durationVal, ok := v.Val.(time.Duration)
 	if !ok {
-		return DurationValue{err: fmt.Errorf("%v is not a duration", v.v)}
+		return DurationValue{Err: fmt.Errorf("%v is not a duration", v.Val)}
 	}
 
-	return DurationValueOf(durationVal)
+	return DurationValue{Val: durationVal}
 }
 
 func (v DynValue) NullValue() NullValue {
-	if v.err != nil {
-		return NullValue{err: v.err}
+	if v.Err != nil {
+		return NullValue{Err: v.Err}
 	}
 
-	if v.v != struct{}{} {
-		return NullValue{err: fmt.Errorf("%v is not null", v.v)}
+	if v.Val != struct{}{} {
+		return NullValue{Err: fmt.Errorf("%v is not null", v.Val)}
 	}
 
 	return NullValue{}
 }
 
 func ToListValue[T any](v DynValue) ListValue[T] {
-	if v.err != nil {
-		return ListValue[T]{err: v.err}
+	if v.Err != nil {
+		return ListValue[T]{Err: v.Err}
 	}
 
-	if vList, ok := v.v.([]T); ok {
-		return ListValue[T]{v: vList}
+	if vList, ok := v.Val.([]T); ok {
+		return ListValue[T]{Val: vList}
 	}
 
-	listVal, err := toSlice(reflect.ValueOf(v.v), reflect.TypeFor[T]())
+	listVal, err := toSlice(reflect.ValueOf(v.Val), reflect.TypeFor[T]())
 	if err != nil {
-		return ListValue[T]{err: err}
+		return ListValue[T]{Err: err}
 	}
 
-	return ListValueOf(listVal.Interface().([]T))
+	return ListValue[T]{Val: listVal.Interface().([]T)}
 }
 
 func toSlice(v reflect.Value, elemType reflect.Type) (reflect.Value, error) {
@@ -241,264 +233,153 @@ func toMap(v reflect.Value, keyType reflect.Type, valueType reflect.Type) (refle
 	return result, nil
 }
 
-func DynValueOf(v any) DynValue {
-	return DynValue{v: v}
-}
-
-func DynErrorOf(err error) DynValue {
-	return DynValue{err: err}
-}
-
 // IntValue represents a statically typed int value.
 type IntValue struct {
-	v   int64
-	err error
-}
-
-func (v IntValue) Val() int64 {
-	return v.v
-}
-
-func (v IntValue) Err() error {
-	return v.err
+	Val int64
+	Err error
 }
 
 func (v IntValue) DynValue() DynValue {
-	if v.err != nil {
-		return DynErrorOf(v.err)
+	if v.Err != nil {
+		return DynValue{Err: v.Err}
 	}
-	return DynValueOf(v.v)
+	return DynValue{Val: v.Val}
 }
 
 func (v IntValue) IntValue() IntValue {
 	return v
 }
 
-func IntValueOf(v int64) IntValue {
-	return IntValue{v: v}
-}
-
 // UintValue represents a statically typed uint value.
 type UintValue struct {
-	v   uint64
-	err error
-}
-
-func (v UintValue) Val() uint64 {
-	return v.v
-}
-
-func (v UintValue) Err() error {
-	return v.err
+	Val uint64
+	Err error
 }
 
 func (v UintValue) DynValue() DynValue {
-	if v.err != nil {
-		return DynErrorOf(v.err)
+	if v.Err != nil {
+		return DynValue{Err: v.Err}
 	}
-	return DynValueOf(v.v)
+	return DynValue{Val: v.Val}
 }
 
 func (v UintValue) UintValue() UintValue {
 	return v
 }
 
-func UintValueOf(v uint64) UintValue {
-	return UintValue{v: v}
-}
-
 // DoubleValue represents a statically typed double value.
 type DoubleValue struct {
-	v   float64
-	err error
-}
-
-func (v DoubleValue) Val() float64 {
-	return v.v
-}
-
-func (v DoubleValue) Err() error {
-	return v.err
+	Val float64
+	Err error
 }
 
 func (v DoubleValue) DynValue() DynValue {
-	if v.err != nil {
-		return DynErrorOf(v.err)
+	if v.Err != nil {
+		return DynValue{Err: v.Err}
 	}
-	return DynValueOf(v.v)
+	return DynValue{Val: v.Val}
 }
 
 func (v DoubleValue) DoubleValue() DoubleValue {
 	return v
 }
 
-func DoubleValueOf(v float64) DoubleValue {
-	return DoubleValue{v: v}
-}
-
 // BoolValue represents a statically typed bool value.
 type BoolValue struct {
-	v   bool
-	err error
-}
-
-func (v BoolValue) Val() bool {
-	return v.v
-}
-
-func (v BoolValue) Err() error {
-	return v.err
+	Val bool
+	Err error
 }
 
 func (v BoolValue) DynValue() DynValue {
-	if v.err != nil {
-		return DynErrorOf(v.err)
+	if v.Err != nil {
+		return DynValue{Err: v.Err}
 	}
-	return DynValueOf(v.v)
+	return DynValue{Val: v.Val}
 }
 
 func (v BoolValue) BoolValue() BoolValue {
 	return v
 }
 
-func BoolValueOf(v bool) BoolValue {
-	return BoolValue{v: v}
-}
-
 // StringValue represents a statically typed string value.
 type StringValue struct {
-	v   string
-	err error
-}
-
-func (v StringValue) Val() string {
-	return v.v
-}
-
-func (v StringValue) Err() error {
-	return v.err
+	Val string
+	Err error
 }
 
 func (v StringValue) DynValue() DynValue {
-	if v.err != nil {
-		return DynErrorOf(v.err)
+	if v.Err != nil {
+		return DynValue{Err: v.Err}
 	}
-	return DynValueOf(v.v)
+	return DynValue{Val: v.Val}
 }
 
 func (v StringValue) StringValue() StringValue {
 	return v
 }
 
-func StringValueOf(v string) StringValue {
-	return StringValue{v: v}
-}
-
 // BytesValue represents a statically typed bytes value.
 type BytesValue struct {
-	v   []byte
-	err error
-}
-
-func (v BytesValue) Val() []byte {
-	return v.v
-}
-
-func (v BytesValue) Err() error {
-	return v.err
+	Val []byte
+	Err error
 }
 
 func (v BytesValue) DynValue() DynValue {
-	if v.err != nil {
-		return DynErrorOf(v.err)
+	if v.Err != nil {
+		return DynValue{Err: v.Err}
 	}
-	return DynValueOf(v.v)
+	return DynValue{Val: v.Val}
 }
 
 func (v BytesValue) BytesValue() BytesValue {
 	return v
 }
 
-func BytesValueOf(v []byte) BytesValue {
-	return BytesValue{v: v}
-}
-
 // TimestampValue represents a statically typed timestamp value.
 type TimestampValue struct {
-	v   time.Time
-	err error
-}
-
-func (v TimestampValue) Val() time.Time {
-	return v.v
-}
-
-func (v TimestampValue) Err() error {
-	return v.err
+	Val time.Time
+	Err error
 }
 
 func (v TimestampValue) DynValue() DynValue {
-	if v.err != nil {
-		return DynErrorOf(v.err)
+	if v.Err != nil {
+		return DynValue{Err: v.Err}
 	}
-	return DynValueOf(v.v)
+	return DynValue{Val: v.Val}
 }
 
 func (v TimestampValue) TimestampValue() TimestampValue {
 	return v
 }
 
-func TimestampValueOf(v time.Time) TimestampValue {
-	return TimestampValue{v: v}
-}
-
 // DurationValue represents a statically typed duration value.
 type DurationValue struct {
-	v   time.Duration
-	err error
-}
-
-func (v DurationValue) Val() time.Duration {
-	return v.v
-}
-
-func (v DurationValue) Err() error {
-	return v.err
+	Val time.Duration
+	Err error
 }
 
 func (v DurationValue) DynValue() DynValue {
-	if v.err != nil {
-		return DynErrorOf(v.err)
+	if v.Err != nil {
+		return DynValue{Err: v.Err}
 	}
-	return DynValueOf(v.v)
+	return DynValue{Val: v.Val}
 }
 
 func (v DurationValue) DurationValue() DurationValue {
 	return v
 }
 
-func DurationValueOf(v time.Duration) DurationValue {
-	return DurationValue{v: v}
-}
-
 // NullValue represents a statically typed null value.
 type NullValue struct {
-	err error
-}
-
-func (NullValue) Val() struct{} {
-	return struct{}{}
-}
-
-func (v NullValue) Err() error {
-	return v.err
+	Val struct{}
+	Err error
 }
 
 func (v NullValue) DynValue() DynValue {
-	if v.err != nil {
-		return DynErrorOf(v.err)
+	if v.Err != nil {
+		return DynValue{Err: v.Err}
 	}
-	return DynValueOf(struct{}{})
+	return DynValue{Val: v.Val}
 }
 
 func (v NullValue) NullValue() NullValue {
@@ -507,25 +388,13 @@ func (v NullValue) NullValue() NullValue {
 
 // ListValue represents a statically typed list value.
 type ListValue[T any] struct {
-	v   []T
-	err error
-}
-
-func (v ListValue[T]) Val() []T {
-	return v.v
-}
-
-func (v ListValue[T]) Err() error {
-	return v.err
+	Val []T
+	Err error
 }
 
 func (v ListValue[T]) DynValue() DynValue {
-	if v.err != nil {
-		return DynValue{err: v.err}
+	if v.Err != nil {
+		return DynValue{Err: v.Err}
 	}
-	return DynValue{v: v.v}
-}
-
-func ListValueOf[T any](v []T) ListValue[T] {
-	return ListValue[T]{v: v}
+	return DynValue{Val: v.Val}
 }

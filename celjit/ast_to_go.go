@@ -18,25 +18,25 @@ func astToGoSource(node *expr.Expr, checkedExpr *expr.CheckedExpr) (string, erro
 	case *expr.Expr_ConstExpr:
 		switch constKind := exprKind.ConstExpr.GetConstantKind().(type) {
 		case *expr.Constant_Int64Value:
-			return fmt.Sprintf("runtime.IntValueOf(int64(%d))", constKind.Int64Value), nil
+			return fmt.Sprintf("runtime.IntValue{Val: int64(%d)}", constKind.Int64Value), nil
 		case *expr.Constant_Uint64Value:
-			return fmt.Sprintf("runtime.UintValueOf(uint64(%d))", constKind.Uint64Value), nil
+			return fmt.Sprintf("runtime.UintValue{Val: uint64(%d)}", constKind.Uint64Value), nil
 		case *expr.Constant_DoubleValue:
-			return fmt.Sprintf("runtime.DoubleValueOf(%f)", constKind.DoubleValue), nil
+			return fmt.Sprintf("runtime.DoubleValue{Val: %f}", constKind.DoubleValue), nil
 		case *expr.Constant_BoolValue:
-			return fmt.Sprintf("runtime.BoolValueOf(%t)", constKind.BoolValue), nil
+			return fmt.Sprintf("runtime.BoolValue{Val: %t}", constKind.BoolValue), nil
 		case *expr.Constant_StringValue:
-			return fmt.Sprintf("runtime.StringValueOf(%q)", constKind.StringValue), nil
+			return fmt.Sprintf("runtime.StringValue{Val: %q}", constKind.StringValue), nil
 		case *expr.Constant_BytesValue:
 			var builder strings.Builder
-			builder.WriteString("runtime.BytesValueOf([]byte{")
+			builder.WriteString("runtime.BytesValue{Val: []byte{")
 			for i, b := range constKind.BytesValue {
 				if i > 0 {
 					builder.WriteString(", ")
 				}
 				builder.WriteString(strconv.Itoa(int(b)))
 			}
-			builder.WriteString("})")
+			builder.WriteString("}}")
 			return builder.String(), nil
 		case *expr.Constant_NullValue:
 			return "(runtime.NullValue{})", nil
@@ -59,15 +59,15 @@ func astToGoSource(node *expr.Expr, checkedExpr *expr.CheckedExpr) (string, erro
 
 			fmt.Fprintf(&builder, `
 			elem%d := %s
-			if elem%[1]d.Err() != nil {
+			if elem%[1]d.Err != nil {
 				return elem%[1]d.DynValue()
 			}
-			s[%[1]d] = elem%[1]d.Val()`,
+			s[%[1]d] = elem%[1]d.Val`,
 				i, elemSource,
 			)
 		}
 		builder.WriteString(`
-			return runtime.DynValueOf(s)
+			return runtime.DynValue{Val: s}
 		})()`)
 		return builder.String(), nil
 	case *expr.Expr_StructExpr:
@@ -91,19 +91,19 @@ func astToGoSource(node *expr.Expr, checkedExpr *expr.CheckedExpr) (string, erro
 
 				fmt.Fprintf(&builder, `
 				key%d := %s
-				if key%[1]d.Err() != nil {
+				if key%[1]d.Err != nil {
 					return key%[1]d.DynValue()
 				}
 				val%[1]d := %[3]s
-				if val%[1]d.Err() != nil {
+				if val%[1]d.Err != nil {
 					return val%[1]d.DynValue()
 				}
-				s[key%[1]d.Val()] = val%[1]d.Val()`,
+				s[key%[1]d.Val] = val%[1]d.Val`,
 					i, keySource, valSource,
 				)
 			}
 			builder.WriteString(`
-				return runtime.DynValueOf(s)
+				return runtime.DynValue{Val: s}
 			})()`)
 			return builder.String(), nil
 		} else {
@@ -147,31 +147,31 @@ func astToGoSource(node *expr.Expr, checkedExpr *expr.CheckedExpr) (string, erro
 
 		return fmt.Sprintf(`(func() runtime.DynValue {
 			collection := %[1]s.DynValue()
-			if collection.Err() != nil {
+			if collection.Err != nil {
 				return collection
 			}
 
-			collectionVal := reflect.ValueOf(collection.Val())
+			collectionVal := reflect.ValueOf(collection.Val)
 			switch collectionVal.Type().Kind() {
 			case reflect.Slice:
 				%[2]s := %[3]s.DynValue()
-				if %[2]s.Err() != nil {
+				if %[2]s.Err != nil {
 					return %[2]s
 				}
 
 				for i := range collectionVal.Len() {
-					%[4]s := runtime.DynValueOf(collectionVal.Index(i).Interface())
+					%[4]s := runtime.DynValue{Val: collectionVal.Index(i).Interface()}
 
 					cond := %[5]s.DynValue()
-					if cond.Err() != nil {
+					if cond.Err != nil {
 						return cond
 					}
-					if cond.Val() != true {
+					if cond.Val != true {
 						break
 					}
 
 					%[2]s = %[6]s.DynValue()
-					if %[2]s.Err() != nil {
+					if %[2]s.Err != nil {
 						return %[2]s
 					}
 				}
@@ -179,31 +179,31 @@ func astToGoSource(node *expr.Expr, checkedExpr *expr.CheckedExpr) (string, erro
 				return %[7]s.DynValue()
 			case reflect.Map:
 				%[2]s := %[3]s.DynValue()
-				if %[2]s.Err() != nil {
+				if %[2]s.Err != nil {
 					return %[2]s
 				}
 
 				mapIter := collectionVal.MapRange()
 				for mapIter.Next() {
-					%[4]s := runtime.DynValueOf(mapIter.Key().Interface())
+					%[4]s := runtime.DynValue{Val: mapIter.Key().Interface()}
 
 					cond := %[5]s.DynValue()
-					if cond.Err() != nil {
+					if cond.Err != nil {
 						return cond
 					}
-					if cond.Val() != true {
+					if cond.Val != true {
 						break
 					}
 
 					%[2]s = %[6]s.DynValue()
-					if %[2]s.Err() != nil {
+					if %[2]s.Err != nil {
 						return %[2]s
 					}
 				}
 
 				return %[7]s.DynValue()
 			default:
-				return runtime.DynErrorOf(fmt.Errorf("unsupported comprehension type %%T", collectionVal))
+				return runtime.DynValue{Err: fmt.Errorf("unsupported comprehension type %%T", collectionVal)}
 			}
 		})()`,
 			rangeGo, mangleVariable(exprKind.ComprehensionExpr.GetAccuVar()), accumulatorInitGo, mangleVariable(exprKind.ComprehensionExpr.GetIterVar()), loopCondGo, loopStepGo, resultGo,
@@ -269,11 +269,11 @@ func astToGoSource(node *expr.Expr, checkedExpr *expr.CheckedExpr) (string, erro
 		case operators.Conditional:
 			return fmt.Sprintf(`(func() runtime.DynValue {
 				cond := %s.DynValue()
-				if cond.Err() != nil {
+				if cond.Err != nil {
 					return cond
 				}
 
-				if cond.Val() == true {
+				if cond.Val == true {
 					return %s.DynValue()
 				} else {
 					return %s.DynValue()

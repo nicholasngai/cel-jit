@@ -1,11 +1,11 @@
 package runtime
 
 func AddInt64(a, b IntValue) IntValue {
-	if a.err != nil {
+	if a.Err != nil {
 		return a
 	}
-	if b.err != nil {
+	if b.Err != nil {
 		return b
 	}
-	return IntValueOf(a.v + b.v)
+	return IntValue{Val: a.Val + b.Val}
 }

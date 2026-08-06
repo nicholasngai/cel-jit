@@ -186,7 +186,7 @@ var (
 			`
 func Program%d(%s) (%s, error) {
 	val := program%[1]d(%[4]s)
-	return val.Val(), val.Err()
+	return val.Val, val.Err
 }
 
 func program%[1]d(%[5]s) runtime.%s {
@@ -198,7 +198,7 @@ func program%[1]d(%[5]s) runtime.%s {
 				return []any{mangleParameter(r.parameter.Name), r.goType}
 			}),
 			returnGoType,
-			repeat("runtime.%sOf(%s)", runtimeParameters, func(r runtimeParameter) []any {
+			repeat("runtime.%s{Val: %s}", runtimeParameters, func(r runtimeParameter) []any {
 				return []any{r.runtimeType, mangleParameter(r.parameter.Name)}
 			}),
 			repeat("%s runtime.%s", runtimeParameters, func(r runtimeParameter) []any {
