@@ -129,14 +129,14 @@ func Program%d(%s) (any, error) {
 	return val.Val(), val.Err()
 }
 
-func program%[1]d(%[4]s) runtime.Value {
+func program%[1]d(%[4]s) runtime.DynValue {
 	return %s
 }
 `,
 			i,
 			repeatParams("%s any", exprConfig.Parameters, mangleParameter),
-			repeatParams("runtime.ValueOf(%s)", exprConfig.Parameters, mangleParameter),
-			repeatParams("%s runtime.Value", exprConfig.Parameters, mangleVariable),
+			repeatParams("runtime.DynValueOf(%s)", exprConfig.Parameters, mangleParameter),
+			repeatParams("%s runtime.DynValue", exprConfig.Parameters, mangleVariable),
 			goSource,
 		); err != nil {
 			return nil, err

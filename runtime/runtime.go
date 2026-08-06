@@ -3,7 +3,6 @@ package runtime
 import (
 	"errors"
 	"fmt"
-	"iter"
 	"math"
 	"reflect"
 	"regexp"
@@ -13,101 +12,48 @@ import (
 	"time"
 )
 
-type Value struct {
-	v   any
-	err error
-}
-
-func (v Value) Val() any {
-	return v.v
-}
-
-func (v Value) Err() error {
-	return v.err
-}
-
-// ValueOf returns a [Value] for the given value.
-func ValueOf(v any) Value {
-	return Value{v: v}
-}
-
-// ValueOfSlice returns a [Value] containing a slice from an iterator of
-// [Value]s. If any value is an error, it returns the first error value
-// instead.
-func ValueOfSlice(elems iter.Seq[Value], len int) Value {
-	listVal := make([]any, 0, len)
-	for elem := range elems {
-		if elem.err != nil {
-			return elem
-		}
-		listVal = append(listVal, elem.v)
-	}
-	return Value{v: listVal}
-}
-
-// ValueOfMap returns a [Value] containing a map from an iterator of key-value
-// [Value] pairs. If any value is an error, it returns the first error value
-// instead.
-func ValueOfMap(entries iter.Seq2[Value, Value], len int) Value {
-	mapVal := make(map[any]any, len)
-	for key, value := range entries {
-		if key.err != nil {
-			return key
-		}
-		if value.err != nil {
-			return value
-		}
-		mapVal[key.v] = value.v
-	}
-	return Value{v: mapVal}
-}
-
-func ErrorOf(err error) Value {
-	return Value{err: err}
-}
-
 //
 // OPERATORS.
 //
 
-func Select(a Value, fieldName string) Value {
+func Select(a DynValue, fieldName string) DynValue {
 	if a.err != nil {
 		return a
 	}
 
 	aVal := reflect.ValueOf(a.v)
 	if aVal.Type().Kind() != reflect.Map {
-		return ErrorOf(errors.New("not a map"))
+		return DynErrorOf(errors.New("not a map"))
 	}
 
 	elemVal := aVal.MapIndex(reflect.ValueOf(fieldName))
 	if !elemVal.IsValid() {
-		return ErrorOf(fmt.Errorf("no such key %q", fieldName))
+		return DynErrorOf(fmt.Errorf("no such key %q", fieldName))
 	}
 
-	return ValueOf(elemVal.Interface())
+	return DynValueOf(elemVal.Interface())
 }
 
-func Has(a Value, fieldName string) Value {
+func Has(a DynValue, fieldName string) DynValue {
 	if a.err != nil {
 		return a
 	}
 
 	aVal := reflect.ValueOf(a.v)
 	if aVal.Type().Kind() != reflect.Map {
-		return ValueOf(false)
+		return DynValueOf(false)
 	}
 
-	return ValueOf(aVal.MapIndex(reflect.ValueOf(fieldName)).IsValid())
+	return DynValueOf(aVal.MapIndex(reflect.ValueOf(fieldName)).IsValid())
 }
 
-func LogicalAnd(a, b Value) Value {
+func LogicalAnd(a, b DynValue) DynValue {
 	// Unlike most other operators, logical AND may swallow errors if either
 	// input is false.
 	aBool, aOk := a.v.(bool)
 	bBool, bOk := b.v.(bool)
 	if aOk && !aBool || bOk && !bBool {
-		return ValueOf(false)
+		return DynValueOf(false)
 	}
 
 	if a.err != nil {
@@ -118,19 +64,19 @@ func LogicalAnd(a, b Value) Value {
 	}
 
 	if aOk && bOk {
-		return ValueOf(true)
+		return DynValueOf(true)
 	}
 
-	return ErrorOf(fmt.Errorf("incompatible types %T and %T", a.v, b.v))
+	return DynErrorOf(fmt.Errorf("incompatible types %T and %T", a.v, b.v))
 }
 
-func LogicalOr(a, b Value) Value {
+func LogicalOr(a, b DynValue) DynValue {
 	// Unlike most other operators, logical OR may swallow errors if either
 	// input is true.
 	aBool, aOk := a.v.(bool)
 	bBool, bOk := b.v.(bool)
 	if aOk && aBool || bOk && bBool {
-		return ValueOf(true)
+		return DynValueOf(true)
 	}
 
 	if a.err != nil {
@@ -141,26 +87,26 @@ func LogicalOr(a, b Value) Value {
 	}
 
 	if aOk && bOk {
-		return ValueOf(false)
+		return DynValueOf(false)
 	}
 
-	return ErrorOf(fmt.Errorf("incompatible types %T and %T", a.v, b.v))
+	return DynErrorOf(fmt.Errorf("incompatible types %T and %T", a.v, b.v))
 }
 
-func LogicalNot(a Value) Value {
+func LogicalNot(a DynValue) DynValue {
 	if a.err != nil {
 		return a
 	}
 
 	aBool, aOk := a.v.(bool)
 	if !aOk {
-		return ErrorOf(fmt.Errorf("incompatible type %T", a.v))
+		return DynErrorOf(fmt.Errorf("incompatible type %T", a.v))
 	}
 
-	return ValueOf(!aBool)
+	return DynValueOf(!aBool)
 }
 
-func Equals(a, b Value) Value {
+func Equals(a, b DynValue) DynValue {
 	if a.err != nil {
 		return a
 	}
@@ -168,10 +114,10 @@ func Equals(a, b Value) Value {
 		return b
 	}
 
-	return ValueOf(eq(a.v, b.v))
+	return DynValueOf(eq(a.v, b.v))
 }
 
-func NotEquals(a, b Value) Value {
+func NotEquals(a, b DynValue) DynValue {
 	if a.err != nil {
 		return a
 	}
@@ -179,7 +125,7 @@ func NotEquals(a, b Value) Value {
 		return b
 	}
 
-	return ValueOf(!eq(a.v, b.v))
+	return DynValueOf(!eq(a.v, b.v))
 }
 
 func eq(a, b any) bool {
@@ -327,7 +273,7 @@ func eq(a, b any) bool {
 	return a == b
 }
 
-func Less(a, b Value) Value {
+func Less(a, b DynValue) DynValue {
 	return compare(
 		a, b,
 		func(a, b int64) bool { return a < b },
@@ -341,7 +287,7 @@ func Less(a, b Value) Value {
 	)
 }
 
-func LessEquals(a, b Value) Value {
+func LessEquals(a, b DynValue) DynValue {
 	return compare(
 		a, b,
 		func(a, b int64) bool { return a <= b },
@@ -355,7 +301,7 @@ func LessEquals(a, b Value) Value {
 	)
 }
 
-func Greater(a, b Value) Value {
+func Greater(a, b DynValue) DynValue {
 	return compare(
 		a, b,
 		func(a, b int64) bool { return a > b },
@@ -369,7 +315,7 @@ func Greater(a, b Value) Value {
 	)
 }
 
-func GreaterEquals(a, b Value) Value {
+func GreaterEquals(a, b DynValue) DynValue {
 	return compare(
 		a, b,
 		func(a, b int64) bool { return a >= b },
@@ -384,7 +330,7 @@ func GreaterEquals(a, b Value) Value {
 }
 
 func compare(
-	a, b Value,
+	a, b DynValue,
 	cmpInt func(a, b int64) bool,
 	cmpUint func(a, b uint64) bool,
 	cmpDouble func(a, b float64) bool,
@@ -393,7 +339,7 @@ func compare(
 	cmpBytes func(a, b []byte) bool,
 	cmpTime func(a, b time.Time) bool,
 	cmpDuration func(a, b time.Duration) bool,
-) Value {
+) DynValue {
 	if a.err != nil {
 		return a
 	}
@@ -404,48 +350,48 @@ func compare(
 	aInt, aOk := a.v.(int64)
 	bInt, bOk := b.v.(int64)
 	if aOk && bOk {
-		return ValueOf(cmpInt(aInt, bInt))
+		return DynValueOf(cmpInt(aInt, bInt))
 	}
 	aUint, aOk := a.v.(uint64)
 	bUint, bOk := b.v.(uint64)
 	if aOk && bOk {
-		return ValueOf(cmpUint(aUint, bUint))
+		return DynValueOf(cmpUint(aUint, bUint))
 	}
 	aDouble, aOk := a.v.(float64)
 	bDouble, bOk := b.v.(float64)
 	if aOk && bOk {
-		return ValueOf(cmpDouble(aDouble, bDouble))
+		return DynValueOf(cmpDouble(aDouble, bDouble))
 	}
 	aBool, aOk := a.v.(bool)
 	bBool, bOk := b.v.(bool)
 	if aOk && bOk {
-		return ValueOf(cmpBool(aBool, bBool))
+		return DynValueOf(cmpBool(aBool, bBool))
 	}
 	aString, aOk := a.v.(string)
 	bString, bOk := b.v.(string)
 	if aOk && bOk {
-		return ValueOf(cmpString(aString, bString))
+		return DynValueOf(cmpString(aString, bString))
 	}
 	aBytes, aOk := a.v.([]byte)
 	bBytes, bOk := b.v.([]byte)
 	if aOk && bOk {
-		return ValueOf(cmpBytes(aBytes, bBytes))
+		return DynValueOf(cmpBytes(aBytes, bBytes))
 	}
 	aTime, aOk := a.v.(time.Time)
 	bTime, bOk := b.v.(time.Time)
 	if aOk && bOk {
-		return ValueOf(cmpTime(aTime, bTime))
+		return DynValueOf(cmpTime(aTime, bTime))
 	}
 	aDuration, aOk := a.v.(time.Duration)
 	bDuration, bOk := b.v.(time.Duration)
 	if aOk && bOk {
-		return ValueOf(cmpDuration(aDuration, bDuration))
+		return DynValueOf(cmpDuration(aDuration, bDuration))
 	}
 
-	return ErrorOf(fmt.Errorf("incompatible types %T and %T", a.v, b.v))
+	return DynErrorOf(fmt.Errorf("incompatible types %T and %T", a.v, b.v))
 }
 
-func Add(a, b Value) Value {
+func Add(a, b DynValue) DynValue {
 	if a.err != nil {
 		return a
 	}
@@ -456,25 +402,25 @@ func Add(a, b Value) Value {
 	aInt, aOk := a.v.(int64)
 	bInt, bOk := b.v.(int64)
 	if aOk && bOk {
-		return ValueOf(aInt + bInt)
+		return DynValueOf(aInt + bInt)
 	}
 
 	aUint, aOk := a.v.(uint64)
 	bUint, bOk := b.v.(uint64)
 	if aOk && bOk {
-		return ValueOf(aUint + bUint)
+		return DynValueOf(aUint + bUint)
 	}
 
 	aDouble, aOk := a.v.(float64)
 	bDouble, bOk := b.v.(float64)
 	if aOk && bOk {
-		return ValueOf(aDouble + bDouble)
+		return DynValueOf(aDouble + bDouble)
 	}
 
 	aStr, aOk := a.v.(string)
 	bStr, bOk := b.v.(string)
 	if aOk && bOk {
-		return ValueOf(aStr + bStr)
+		return DynValueOf(aStr + bStr)
 	}
 
 	aTime, aIsTime := a.v.(time.Time)
@@ -482,13 +428,13 @@ func Add(a, b Value) Value {
 	aDuration, aIsDuration := a.v.(time.Duration)
 	bDuration, bIsDuration := b.v.(time.Duration)
 	if aIsTime && bIsDuration {
-		return ValueOf(aTime.Add(bDuration))
+		return DynValueOf(aTime.Add(bDuration))
 	}
 	if aIsDuration && bIsTime {
-		return ValueOf(bTime.Add(aDuration))
+		return DynValueOf(bTime.Add(aDuration))
 	}
 	if aIsDuration && bIsDuration {
-		return ValueOf(aDuration + bDuration)
+		return DynValueOf(aDuration + bDuration)
 	}
 
 	aVal := reflect.ValueOf(a.v)
@@ -499,7 +445,7 @@ func Add(a, b Value) Value {
 	bIsList := bType.Kind() == reflect.Slice
 	if aIsList && bIsList {
 		if aType.Elem() == bType.Elem() {
-			return ValueOf(reflect.AppendSlice(aVal, bVal).Interface())
+			return DynValueOf(reflect.AppendSlice(aVal, bVal).Interface())
 		}
 
 		// Differing types. Fall back to []any.
@@ -510,13 +456,13 @@ func Add(a, b Value) Value {
 		for i := range bVal.Len() {
 			res[aVal.Len() + i] = bVal.Index(i).Interface()
 		}
-		return ValueOf(res)
+		return DynValueOf(res)
 	}
 
-	return ErrorOf(fmt.Errorf("incompatible types %T and %T", a.v, b.v))
+	return DynErrorOf(fmt.Errorf("incompatible types %T and %T", a.v, b.v))
 }
 
-func Subtract(a, b Value) Value {
+func Subtract(a, b DynValue) DynValue {
 	if a.err != nil {
 		return a
 	}
@@ -527,19 +473,19 @@ func Subtract(a, b Value) Value {
 	aInt, aOk := a.v.(int64)
 	bInt, bOk := b.v.(int64)
 	if aOk && bOk {
-		return ValueOf(aInt - bInt)
+		return DynValueOf(aInt - bInt)
 	}
 
 	aUint, aOk := a.v.(uint64)
 	bUint, bOk := b.v.(uint64)
 	if aOk && bOk {
-		return ValueOf(aUint - bUint)
+		return DynValueOf(aUint - bUint)
 	}
 
 	aDouble, aOk := a.v.(float64)
 	bDouble, bOk := b.v.(float64)
 	if aOk && bOk {
-		return ValueOf(aDouble - bDouble)
+		return DynValueOf(aDouble - bDouble)
 	}
 
 	aTime, aIsTime := a.v.(time.Time)
@@ -547,19 +493,19 @@ func Subtract(a, b Value) Value {
 	aDuration, aIsDuration := a.v.(time.Duration)
 	bDuration, bIsDuration := b.v.(time.Duration)
 	if aIsTime && bIsTime {
-		return ValueOf(aTime.Sub(bTime))
+		return DynValueOf(aTime.Sub(bTime))
 	}
 	if aIsTime && bIsDuration {
-		return ValueOf(aTime.Add(-bDuration))
+		return DynValueOf(aTime.Add(-bDuration))
 	}
 	if aIsDuration && bIsDuration {
-		return ValueOf(aDuration - bDuration)
+		return DynValueOf(aDuration - bDuration)
 	}
 
-	return ErrorOf(fmt.Errorf("incompatible types %T and %T", a.v, b.v))
+	return DynErrorOf(fmt.Errorf("incompatible types %T and %T", a.v, b.v))
 }
 
-func Multiply(a, b Value) Value {
+func Multiply(a, b DynValue) DynValue {
 	if a.err != nil {
 		return a
 	}
@@ -570,25 +516,25 @@ func Multiply(a, b Value) Value {
 	aInt, aOk := a.v.(int64)
 	bInt, bOk := b.v.(int64)
 	if aOk && bOk {
-		return ValueOf(aInt * bInt)
+		return DynValueOf(aInt * bInt)
 	}
 
 	aUint, aOk := a.v.(uint64)
 	bUint, bOk := b.v.(uint64)
 	if aOk && bOk {
-		return ValueOf(aUint * bUint)
+		return DynValueOf(aUint * bUint)
 	}
 
 	aDouble, aOk := a.v.(float64)
 	bDouble, bOk := b.v.(float64)
 	if aOk && bOk {
-		return ValueOf(aDouble * bDouble)
+		return DynValueOf(aDouble * bDouble)
 	}
 
-	return ErrorOf(fmt.Errorf("incompatible types %T and %T", a.v, b.v))
+	return DynErrorOf(fmt.Errorf("incompatible types %T and %T", a.v, b.v))
 }
 
-func Divide(a, b Value) Value {
+func Divide(a, b DynValue) DynValue {
 	if a.err != nil {
 		return a
 	}
@@ -599,25 +545,25 @@ func Divide(a, b Value) Value {
 	aInt, aOk := a.v.(int64)
 	bInt, bOk := b.v.(int64)
 	if aOk && bOk {
-		return ValueOf(aInt / bInt)
+		return DynValueOf(aInt / bInt)
 	}
 
 	aUint, aOk := a.v.(uint64)
 	bUint, bOk := b.v.(uint64)
 	if aOk && bOk {
-		return ValueOf(aUint / bUint)
+		return DynValueOf(aUint / bUint)
 	}
 
 	aDouble, aOk := a.v.(float64)
 	bDouble, bOk := b.v.(float64)
 	if aOk && bOk {
-		return ValueOf(aDouble / bDouble)
+		return DynValueOf(aDouble / bDouble)
 	}
 
-	return ErrorOf(fmt.Errorf("incompatible types %T and %T", a.v, b.v))
+	return DynErrorOf(fmt.Errorf("incompatible types %T and %T", a.v, b.v))
 }
 
-func Modulo(a, b Value) Value {
+func Modulo(a, b DynValue) DynValue {
 	if a.err != nil {
 		return a
 	}
@@ -628,37 +574,37 @@ func Modulo(a, b Value) Value {
 	aInt, aOk := a.v.(int64)
 	bInt, bOk := b.v.(int64)
 	if aOk && bOk {
-		return ValueOf(aInt % bInt)
+		return DynValueOf(aInt % bInt)
 	}
 
 	aUint, aOk := a.v.(uint64)
 	bUint, bOk := b.v.(uint64)
 	if aOk && bOk {
-		return ValueOf(aUint % bUint)
+		return DynValueOf(aUint % bUint)
 	}
 
-	return ErrorOf(fmt.Errorf("incompatible types %T and %T", a.v, b.v))
+	return DynErrorOf(fmt.Errorf("incompatible types %T and %T", a.v, b.v))
 }
 
-func Negate(a Value) Value {
+func Negate(a DynValue) DynValue {
 	if a.err != nil {
 		return a
 	}
 
 	aInt, ok := a.v.(int64)
 	if ok {
-		return ValueOf(-aInt)
+		return DynValueOf(-aInt)
 	}
 
 	aDouble, ok := a.v.(float64)
 	if ok {
-		return ValueOf(-aDouble)
+		return DynValueOf(-aDouble)
 	}
 
-	return ErrorOf(fmt.Errorf("incompatible type %T", a.v))
+	return DynErrorOf(fmt.Errorf("incompatible type %T", a.v))
 }
 
-func Index(a, b Value) Value {
+func Index(a, b DynValue) DynValue {
 	if a.err != nil {
 		return a
 	}
@@ -679,24 +625,24 @@ func Index(a, b Value) Value {
 			index = int(bVal)
 		case float64:
 			if float64(int(bVal)) != bVal {
-				return ErrorOf(fmt.Errorf("cannot index list with value %f", bVal))
+				return DynErrorOf(fmt.Errorf("cannot index list with value %f", bVal))
 			}
 			index = int(bVal)
 		default:
-			return ErrorOf(fmt.Errorf("cannot index list with type %T", b.v))
+			return DynErrorOf(fmt.Errorf("cannot index list with type %T", b.v))
 		}
 
 		// Check bounds.
 		if int(index) < 0 || int(index) >= aVal.Len() {
-			return ErrorOf(fmt.Errorf("index %d out of range", index))
+			return DynErrorOf(fmt.Errorf("index %d out of range", index))
 		}
 
-		return ValueOf(aVal.Index(index).Interface())
+		return DynValueOf(aVal.Index(index).Interface())
 
 	case reflect.Map:
 		bVal := reflect.ValueOf(b.v)
 		if elemVal := aVal.MapIndex(bVal); elemVal.IsValid() {
-			return ValueOf(elemVal.Interface())
+			return DynValueOf(elemVal.Interface())
 		}
 
 		// We didn't find the element. See if we need to do a scan for numeric
@@ -705,7 +651,7 @@ func Index(a, b Value) Value {
 		case int64:
 		case uint64:
 		default:
-			return ErrorOf(fmt.Errorf("no such key %v", bVal))
+			return DynErrorOf(fmt.Errorf("no such key %v", bVal))
 		}
 
 		// If this is a key type that supports numeric equality, then we need to
@@ -716,24 +662,24 @@ func Index(a, b Value) Value {
 			}
 
 			// Found the element.
-			return ValueOf(aMapIter.Value().Interface())
+			return DynValueOf(aMapIter.Value().Interface())
 		}
 
-		return ErrorOf(fmt.Errorf("no such key %v", bVal))
+		return DynErrorOf(fmt.Errorf("no such key %v", bVal))
 	}
 
-	return ErrorOf(fmt.Errorf("incompatible types %T and %T", a.v, b.v))
+	return DynErrorOf(fmt.Errorf("incompatible types %T and %T", a.v, b.v))
 }
 
-func NotStrictlyFalse(a Value) Value {
+func NotStrictlyFalse(a DynValue) DynValue {
 	if a.err != nil {
 		return a
 	}
 
-	return ValueOf(a.v != false)
+	return DynValueOf(a.v != false)
 }
 
-func In(a, b Value) Value {
+func In(a, b DynValue) DynValue {
 	if a.err != nil {
 		return a
 	}
@@ -748,14 +694,14 @@ func In(a, b Value) Value {
 	case reflect.Slice:
 		for i := range bVal.Len() {
 			if eq(a.v, bVal.Index(i).Interface()) {
-				return ValueOf(true)
+				return DynValueOf(true)
 			}
 		}
-		return ValueOf(false)
+		return DynValueOf(false)
 
 	case reflect.Map:
 		if bVal.MapIndex(aVal).IsValid() {
-			return ValueOf(true)
+			return DynValueOf(true)
 		}
 
 		// We didn't find the element. See if we need to do a scan for numeric
@@ -764,7 +710,7 @@ func In(a, b Value) Value {
 		case int64:
 		case uint64:
 		default:
-			return ValueOf(false)
+			return DynValueOf(false)
 		}
 
 		// If this is a key type that supports numeric equality, then we need to
@@ -775,51 +721,51 @@ func In(a, b Value) Value {
 			}
 
 			// Found the element.
-			return ValueOf(true)
+			return DynValueOf(true)
 		}
 
-		return ValueOf(false)
+		return DynValueOf(false)
 	}
 
-	return ErrorOf(fmt.Errorf("incompatible types %T and %T", a.v, b.v))
+	return DynErrorOf(fmt.Errorf("incompatible types %T and %T", a.v, b.v))
 }
 
 //
 // OVERLOADS.
 //
 
-func Size(a Value) Value {
+func Size(a DynValue) DynValue {
 	if a.err != nil {
 		return a
 	}
 
 	switch a := a.v.(type) {
 	case string:
-		return ValueOf(int64(len(a)))
+		return DynValueOf(int64(len(a)))
 	case []byte:
-		return ValueOf(int64(len(a)))
+		return DynValueOf(int64(len(a)))
 	}
 
 	aVal := reflect.ValueOf(a.v)
 	switch aVal.Type().Kind() {
 	case reflect.Slice:
-		return ValueOf(int64(aVal.Len()))
+		return DynValueOf(int64(aVal.Len()))
 	case reflect.Map:
-		return ValueOf(int64(aVal.Len()))
+		return DynValueOf(int64(aVal.Len()))
 	}
 
-	return ErrorOf(fmt.Errorf("incompatible type %T", a.v))
+	return DynErrorOf(fmt.Errorf("incompatible type %T", a.v))
 }
 
-func Contains(a, b Value) Value {
+func Contains(a, b DynValue) DynValue {
 	return eval2(a, b, strings.Contains)
 }
 
-func EndsWith(a, b Value) Value {
+func EndsWith(a, b DynValue) DynValue {
 	return eval2(a, b, strings.HasSuffix)
 }
 
-func Matches(a, b Value) Value {
+func Matches(a, b DynValue) DynValue {
 	if a.err != nil {
 		return a
 	}
@@ -833,19 +779,19 @@ func Matches(a, b Value) Value {
 		// TODO(nngai) Can we pre-compile this somehow?
 		re, err := regexp.Compile(bStr)
 		if err != nil {
-			return ErrorOf(fmt.Errorf("invalid regex %q: %w", bStr, err))
+			return DynErrorOf(fmt.Errorf("invalid regex %q: %w", bStr, err))
 		}
-		return ValueOf(re.MatchString(aStr))
+		return DynValueOf(re.MatchString(aStr))
 	}
 
-	return ErrorOf(fmt.Errorf("incompatible types %T and %T", a.v, b.v))
+	return DynErrorOf(fmt.Errorf("incompatible types %T and %T", a.v, b.v))
 }
 
-func StartsWith(a, b Value) Value {
+func StartsWith(a, b DynValue) DynValue {
 	return eval2(a, b, strings.HasPrefix)
 }
 
-func eval2[T any, U any, R any](a, b Value, eval func(a T, b U) R) Value {
+func eval2[T any, U any, R any](a, b DynValue, eval func(a T, b U) R) DynValue {
 	if a.err != nil {
 		return a
 	}
@@ -856,37 +802,37 @@ func eval2[T any, U any, R any](a, b Value, eval func(a T, b U) R) Value {
 	aStr, aOk := a.v.(T)
 	bStr, bOk := b.v.(U)
 	if aOk && bOk {
-		return ValueOf(eval(aStr, bStr))
+		return DynValueOf(eval(aStr, bStr))
 	}
 
-	return ErrorOf(fmt.Errorf("incompatible types %T and %T", a.v, b.v))
+	return DynErrorOf(fmt.Errorf("incompatible types %T and %T", a.v, b.v))
 }
 
-func GetFullYear(a, b Value) Value {
+func GetFullYear(a, b DynValue) DynValue {
 	return evalTime(a, b, time.Time.Year)
 }
 
-func GetMonth(a, b Value) Value {
+func GetMonth(a, b DynValue) DynValue {
 	return evalTime(a, b, func(a time.Time) time.Month { return a.Month() - 1 })
 }
 
-func GetDayOfYear(a, b Value) Value {
+func GetDayOfYear(a, b DynValue) DynValue {
 	return evalTime(a, b, func (a time.Time) int { return a.YearDay() - 1 })
 }
 
-func GetDate(a, b Value) Value {
+func GetDate(a, b DynValue) DynValue {
 	return evalTime(a, b, time.Time.Day)
 }
 
-func GetDayOfMonth(a, b Value) Value {
+func GetDayOfMonth(a, b DynValue) DynValue {
 	return evalTime(a, b, func (a time.Time) int { return a.Day() - 1 })
 }
 
-func GetDayOfWeek(a, b Value) Value {
+func GetDayOfWeek(a, b DynValue) DynValue {
 	return evalTime(a, b, time.Time.Weekday)
 }
 
-func evalTime[T ~int](a, b Value, eval func(a time.Time) T) Value {
+func evalTime[T ~int](a, b DynValue, eval func(a time.Time) T) DynValue {
 	if a.err != nil {
 		return a
 	}
@@ -900,18 +846,18 @@ func evalTime[T ~int](a, b Value, eval func(a time.Time) T) Value {
 		case string:
 			loc, err := time.LoadLocation(b)
 			if err != nil {
-				return ErrorOf(fmt.Errorf("unknown location %q", b))
+				return DynErrorOf(fmt.Errorf("unknown location %q", b))
 			}
-			return ValueOf(int64(eval(a.In(loc))))
+			return DynValueOf(int64(eval(a.In(loc))))
 		case nil:
-			return ValueOf(int64(eval(a.UTC())))
+			return DynValueOf(int64(eval(a.UTC())))
 		}
 	}
 
-	return ErrorOf(fmt.Errorf("incompatible types %T and %T", a.v, b.v))
+	return DynErrorOf(fmt.Errorf("incompatible types %T and %T", a.v, b.v))
 }
 
-func GetHours(a, b Value) Value {
+func GetHours(a, b DynValue) DynValue {
 	return evalTimeOrDuration(
 		a, b,
 		time.Time.Hour,
@@ -919,7 +865,7 @@ func GetHours(a, b Value) Value {
 	)
 }
 
-func GetMinutes(a, b Value) Value {
+func GetMinutes(a, b DynValue) DynValue {
 	return evalTimeOrDuration(
 		a, b,
 		time.Time.Minute,
@@ -927,7 +873,7 @@ func GetMinutes(a, b Value) Value {
 	)
 }
 
-func GetSeconds(a, b Value) Value {
+func GetSeconds(a, b DynValue) DynValue {
 	return evalTimeOrDuration(
 		a, b,
 		time.Time.Second,
@@ -935,7 +881,7 @@ func GetSeconds(a, b Value) Value {
 	)
 }
 
-func GetMilliseconds(a, b Value) Value {
+func GetMilliseconds(a, b DynValue) DynValue {
 	return evalTimeOrDuration(
 		a, b,
 		func(a time.Time) int { return a.Nanosecond() / 1000000 },
@@ -943,7 +889,7 @@ func GetMilliseconds(a, b Value) Value {
 	)
 }
 
-func evalTimeOrDuration[T ~int, U ~int64](a, b Value, evalTime func(a time.Time) T, evalDuration func(a time.Duration) U) Value {
+func evalTimeOrDuration[T ~int, U ~int64](a, b DynValue, evalTime func(a time.Time) T, evalDuration func(a time.Duration) U) DynValue {
 	if a.err != nil {
 		return a
 	}
@@ -957,27 +903,27 @@ func evalTimeOrDuration[T ~int, U ~int64](a, b Value, evalTime func(a time.Time)
 		case string:
 			loc, err := time.LoadLocation(b)
 			if err != nil {
-				return ErrorOf(fmt.Errorf("unknown location %q", b))
+				return DynErrorOf(fmt.Errorf("unknown location %q", b))
 			}
-			return ValueOf(int64(evalTime(a.In(loc))))
+			return DynValueOf(int64(evalTime(a.In(loc))))
 		case nil:
-			return ValueOf(int64(evalTime(a.UTC())))
+			return DynValueOf(int64(evalTime(a.UTC())))
 		}
 	case time.Duration:
 		switch b.v.(type) {
 		case nil:
-			return ValueOf(int64(evalDuration(a)))
+			return DynValueOf(int64(evalDuration(a)))
 		}
 	}
 
-	return ErrorOf(fmt.Errorf("incompatible types %T and %T", a.v, b.v))
+	return DynErrorOf(fmt.Errorf("incompatible types %T and %T", a.v, b.v))
 }
 
 //
 // TYPE CONVERSION.
 //
 
-func Int(a Value) Value {
+func Int(a DynValue) DynValue {
 	if a.err != nil {
 		return a
 	}
@@ -987,28 +933,28 @@ func Int(a Value) Value {
 		return a
 	case uint64:
 		if aType > uint64(math.MaxInt64) {
-			return ErrorOf(fmt.Errorf("integer overflow %d", aType))
+			return DynErrorOf(fmt.Errorf("integer overflow %d", aType))
 		}
-		return ValueOf(int64(aType))
+		return DynValueOf(int64(aType))
 	case float64:
 		if aType > float64(math.MaxInt64) || aType < float64(math.MinInt64) {
-			return ErrorOf(fmt.Errorf("integer overflow %f", aType))
+			return DynErrorOf(fmt.Errorf("integer overflow %f", aType))
 		}
-		return ValueOf(int64(aType))
+		return DynValueOf(int64(aType))
 	case time.Time:
-		return ValueOf(aType.Unix())
+		return DynValueOf(aType.Unix())
 	case string:
 		i, err := strconv.ParseInt(aType, 10, 64)
 		if err != nil {
-			return ErrorOf(fmt.Errorf("invalid int %q: %w", aType, err))
+			return DynErrorOf(fmt.Errorf("invalid int %q: %w", aType, err))
 		}
-		return ValueOf(i)
+		return DynValueOf(i)
 	}
 
-	return ErrorOf(fmt.Errorf("incompatible type %T", a.v))
+	return DynErrorOf(fmt.Errorf("incompatible type %T", a.v))
 }
 
-func Uint(a Value) Value {
+func Uint(a DynValue) DynValue {
 	if a.err != nil {
 		return a
 	}
@@ -1018,26 +964,26 @@ func Uint(a Value) Value {
 		return a
 	case int64:
 		if aType < 0 {
-			return ErrorOf(fmt.Errorf("unsigned integer overflow %d", aType))
+			return DynErrorOf(fmt.Errorf("unsigned integer overflow %d", aType))
 		}
-		return ValueOf(uint64(aType))
+		return DynValueOf(uint64(aType))
 	case float64:
 		if aType > float64(math.MaxUint64) || aType < 0 {
-			return ErrorOf(fmt.Errorf("unsigned integer overflow %f", aType))
+			return DynErrorOf(fmt.Errorf("unsigned integer overflow %f", aType))
 		}
-		return ValueOf(uint64(aType))
+		return DynValueOf(uint64(aType))
 	case string:
 		i, err := strconv.ParseUint(aType, 10, 64)
 		if err != nil {
-			return ErrorOf(fmt.Errorf("invalid uint %q: %w", aType, err))
+			return DynErrorOf(fmt.Errorf("invalid uint %q: %w", aType, err))
 		}
-		return ValueOf(i)
+		return DynValueOf(i)
 	}
 
-	return ErrorOf(fmt.Errorf("incompatible type %T", a.v))
+	return DynErrorOf(fmt.Errorf("incompatible type %T", a.v))
 }
 
-func Double(a Value) Value {
+func Double(a DynValue) DynValue {
 	if a.err != nil {
 		return a
 	}
@@ -1046,21 +992,21 @@ func Double(a Value) Value {
 	case float64:
 		return a
 	case int64:
-		return ValueOf(float64(aType))
+		return DynValueOf(float64(aType))
 	case uint64:
-		return ValueOf(float64(aType))
+		return DynValueOf(float64(aType))
 	case string:
 		f, err := strconv.ParseFloat(aType, 10)
 		if err != nil {
-			return ErrorOf(fmt.Errorf("invalid float %q: %w", aType, err))
+			return DynErrorOf(fmt.Errorf("invalid float %q: %w", aType, err))
 		}
-		return ValueOf(f)
+		return DynValueOf(f)
 	}
 
-	return ErrorOf(fmt.Errorf("incompatible type %T", a.v))
+	return DynErrorOf(fmt.Errorf("incompatible type %T", a.v))
 }
 
-func Bool(a Value) Value {
+func Bool(a DynValue) DynValue {
 	if a.err != nil {
 		return a
 	}
@@ -1071,15 +1017,15 @@ func Bool(a Value) Value {
 	case string:
 		b, err := strconv.ParseBool(aType)
 		if err != nil {
-			return ErrorOf(fmt.Errorf("invalid bool %q: %w", aType, err))
+			return DynErrorOf(fmt.Errorf("invalid bool %q: %w", aType, err))
 		}
-		return ValueOf(b)
+		return DynValueOf(b)
 	}
 
-	return ErrorOf(fmt.Errorf("incompatible type %T", a.v))
+	return DynErrorOf(fmt.Errorf("incompatible type %T", a.v))
 }
 
-func String(a Value) Value {
+func String(a DynValue) DynValue {
 	if a.err != nil {
 		return a
 	}
@@ -1088,29 +1034,29 @@ func String(a Value) Value {
 	case string:
 		return a
 	case int64:
-		return ValueOf(strconv.FormatInt(aType, 10))
+		return DynValueOf(strconv.FormatInt(aType, 10))
 	case uint64:
-		return ValueOf(strconv.FormatUint(aType, 10))
+		return DynValueOf(strconv.FormatUint(aType, 10))
 	case float64:
-		return ValueOf(strconv.FormatFloat(aType, 'g', -1, 64))
+		return DynValueOf(strconv.FormatFloat(aType, 'g', -1, 64))
 	case bool:
-		return ValueOf(strconv.FormatBool(aType))
+		return DynValueOf(strconv.FormatBool(aType))
 	case []byte:
-		return ValueOf(string(aType))
+		return DynValueOf(string(aType))
 	case time.Time:
-		return ValueOf(aType.Format(time.RFC3339Nano))
+		return DynValueOf(aType.Format(time.RFC3339Nano))
 	case time.Duration:
 		if aType % time.Second == 0 {
-			return ValueOf(fmt.Sprintf("%ds", int64(aType / time.Second)))
+			return DynValueOf(fmt.Sprintf("%ds", int64(aType / time.Second)))
 		} else {
-			return ValueOf(fmt.Sprintf("%ss", strconv.FormatFloat(aType.Seconds(), 'f', -1, 64)))
+			return DynValueOf(fmt.Sprintf("%ss", strconv.FormatFloat(aType.Seconds(), 'f', -1, 64)))
 		}
 	}
 
-	return ErrorOf(fmt.Errorf("incompatible type %T", a.v))
+	return DynErrorOf(fmt.Errorf("incompatible type %T", a.v))
 }
 
-func Bytes(a Value) Value {
+func Bytes(a DynValue) DynValue {
 	if a.err != nil {
 		return a
 	}
@@ -1119,13 +1065,13 @@ func Bytes(a Value) Value {
 	case []byte:
 		return a
 	case string:
-		return ValueOf([]byte(aType))
+		return DynValueOf([]byte(aType))
 	}
 
-	return ErrorOf(fmt.Errorf("incompatible type %T", a.v))
+	return DynErrorOf(fmt.Errorf("incompatible type %T", a.v))
 }
 
-func Timestamp(a Value) Value {
+func Timestamp(a DynValue) DynValue {
 	if a.err != nil {
 		return a
 	}
@@ -1136,15 +1082,15 @@ func Timestamp(a Value) Value {
 	case string:
 		t, err := time.Parse(time.RFC3339Nano, aType)
 		if err != nil {
-			return ErrorOf(fmt.Errorf("invalid timestamp %q: %w", aType, err))
+			return DynErrorOf(fmt.Errorf("invalid timestamp %q: %w", aType, err))
 		}
-		return ValueOf(t)
+		return DynValueOf(t)
 	}
 
-	return ErrorOf(fmt.Errorf("incompatible type %T", a.v))
+	return DynErrorOf(fmt.Errorf("incompatible type %T", a.v))
 }
 
-func Duration(a Value) Value {
+func Duration(a DynValue) DynValue {
 	if a.err != nil {
 		return a
 	}
@@ -1155,10 +1101,10 @@ func Duration(a Value) Value {
 	case string:
 		d, err := time.ParseDuration(aType)
 		if err != nil {
-			return ErrorOf(fmt.Errorf("invalid duration %q: %w", aType, err))
+			return DynErrorOf(fmt.Errorf("invalid duration %q: %w", aType, err))
 		}
-		return ValueOf(d)
+		return DynValueOf(d)
 	}
 
-	return ErrorOf(fmt.Errorf("incompatible type %T", a.v))
+	return DynErrorOf(fmt.Errorf("incompatible type %T", a.v))
 }
