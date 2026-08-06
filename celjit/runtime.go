@@ -21,7 +21,7 @@ var writeRuntime = sync.OnceValues(func() (string, error) {
 
 	// Write Go module file.
 	if err := writeFilef(filepath.Join(dir, "go.mod"),
-`module github.com/nicholasngai/cel-jit/runtime-source
+		`module github.com/nicholasngai/cel-jit/runtime-source
 
 go 1.26.0
 `); err != nil {

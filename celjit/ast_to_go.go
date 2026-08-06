@@ -49,7 +49,8 @@ func astToGoSource(node *expr.Expr, checkedExpr *expr.CheckedExpr) (string, erro
 		var builder strings.Builder
 		fmt.Fprintf(&builder, `(func() runtime.DynValue {
 			s := make([]any, %d)`,
-		len(exprKind.ListExpr.GetElements()))
+			len(exprKind.ListExpr.GetElements()),
+		)
 		for i, elem := range exprKind.ListExpr.GetElements() {
 			elemSource, err := astToGoSource(elem, checkedExpr)
 			if err != nil {
@@ -62,7 +63,8 @@ func astToGoSource(node *expr.Expr, checkedExpr *expr.CheckedExpr) (string, erro
 				return elem%[1]d.DynValue()
 			}
 			s[%[1]d] = elem%[1]d.Val()`,
-			i, elemSource)
+				i, elemSource,
+			)
 		}
 		builder.WriteString(`
 			return runtime.DynValueOf(s)
@@ -74,7 +76,8 @@ func astToGoSource(node *expr.Expr, checkedExpr *expr.CheckedExpr) (string, erro
 			var builder strings.Builder
 			fmt.Fprintf(&builder, `(func() runtime.DynValue {
 				s := make(map[any]any, %d)`,
-			len(exprKind.StructExpr.GetEntries()))
+				len(exprKind.StructExpr.GetEntries()),
+			)
 			for i, entry := range exprKind.StructExpr.GetEntries() {
 				keySource, err := astToGoSource(entry.GetMapKey(), checkedExpr)
 				if err != nil {
@@ -96,7 +99,8 @@ func astToGoSource(node *expr.Expr, checkedExpr *expr.CheckedExpr) (string, erro
 					return val%[1]d.DynValue()
 				}
 				s[key%[1]d.Val()] = val%[1]d.Val()`,
-				i, keySource, valSource)
+					i, keySource, valSource,
+				)
 			}
 			builder.WriteString(`
 				return runtime.DynValueOf(s)
@@ -201,7 +205,9 @@ func astToGoSource(node *expr.Expr, checkedExpr *expr.CheckedExpr) (string, erro
 			default:
 				return runtime.DynErrorOf(fmt.Errorf("unsupported comprehension type %%T", collectionVal))
 			}
-		})()`, rangeGo, mangleVariable(exprKind.ComprehensionExpr.GetAccuVar()), accumulatorInitGo, mangleVariable(exprKind.ComprehensionExpr.GetIterVar()), loopCondGo, loopStepGo, resultGo), nil
+		})()`,
+			rangeGo, mangleVariable(exprKind.ComprehensionExpr.GetAccuVar()), accumulatorInitGo, mangleVariable(exprKind.ComprehensionExpr.GetIterVar()), loopCondGo, loopStepGo, resultGo,
+		), nil
 	case *expr.Expr_CallExpr:
 		// Arguments.
 		argsGo := make([]string, 0, len(exprKind.CallExpr.GetArgs()))
@@ -272,7 +278,9 @@ func astToGoSource(node *expr.Expr, checkedExpr *expr.CheckedExpr) (string, erro
 				} else {
 					return %s.DynValue()
 				}
-			})()`, argsGo[0], argsGo[1], argsGo[2]), nil
+			})()`,
+				argsGo[0], argsGo[1], argsGo[2],
+			), nil
 		case operators.LogicalAnd:
 			return fmt.Sprintf("runtime.LogicalAnd(%s.DynValue(), %s.DynValue())", argsGo[0], argsGo[1]), nil
 		case operators.LogicalOr:

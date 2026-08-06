@@ -453,12 +453,12 @@ func Add(a, b DynValue) DynValue {
 		}
 
 		// Differing types. Fall back to []any.
-		res := make([]any, aVal.Len() + bVal.Len())
+		res := make([]any, aVal.Len()+bVal.Len())
 		for i := range aVal.Len() {
 			res[i] = aVal.Index(i).Interface()
 		}
 		for i := range bVal.Len() {
-			res[aVal.Len() + i] = bVal.Index(i).Interface()
+			res[aVal.Len()+i] = bVal.Index(i).Interface()
 		}
 		return DynValueOf(res)
 	}
@@ -821,7 +821,7 @@ func GetMonth(a, b DynValue) DynValue {
 }
 
 func GetDayOfYear(a, b DynValue) DynValue {
-	return evalTime(a, b, func (a time.Time) int { return a.YearDay() - 1 })
+	return evalTime(a, b, func(a time.Time) int { return a.YearDay() - 1 })
 }
 
 func GetDate(a, b DynValue) DynValue {
@@ -829,7 +829,7 @@ func GetDate(a, b DynValue) DynValue {
 }
 
 func GetDayOfMonth(a, b DynValue) DynValue {
-	return evalTime(a, b, func (a time.Time) int { return a.Day() - 1 })
+	return evalTime(a, b, func(a time.Time) int { return a.Day() - 1 })
 }
 
 func GetDayOfWeek(a, b DynValue) DynValue {
@@ -1050,8 +1050,8 @@ func String(a DynValue) DynValue {
 	case time.Time:
 		return DynValueOf(aType.Format(time.RFC3339Nano))
 	case time.Duration:
-		if aType % time.Second == 0 {
-			return DynValueOf(fmt.Sprintf("%ds", int64(aType / time.Second)))
+		if aType%time.Second == 0 {
+			return DynValueOf(fmt.Sprintf("%ds", int64(aType/time.Second)))
 		} else {
 			return DynValueOf(fmt.Sprintf("%ss", strconv.FormatFloat(aType.Seconds(), 'f', -1, 64)))
 		}

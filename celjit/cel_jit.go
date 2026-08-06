@@ -78,7 +78,7 @@ func Compile(config Config) ([]any, error) {
 
 	// Write Go module file.
 	if err := writeFilef(filepath.Join(tempDir, "go.mod"),
-`module github.com/nicholasngai/cel-jit/compiled
+		`module github.com/nicholasngai/cel-jit/compiled
 
 go 1.26.0
 
@@ -86,7 +86,8 @@ require github.com/nicholasngai/cel-jit/runtime-source v0.0.0-00000000000000-000
 
 replace github.com/nicholasngai/cel-jit/runtime-source => %s
 `,
-	runtimeDir); err != nil {
+		runtimeDir,
+	); err != nil {
 		return nil, err
 	}
 
@@ -97,7 +98,7 @@ replace github.com/nicholasngai/cel-jit/runtime-source => %s
 	}
 	defer programFile.Close()
 	if _, err := programFile.WriteString(
-`package main
+		`package main
 
 import (
 	"fmt"
@@ -170,8 +171,8 @@ var (
 				return nil, fmt.Errorf("%q: parameter %q type: %w", exprConfig.Expr, parameter.Name, err)
 			}
 			runtimeParameters = append(runtimeParameters, runtimeParameter{
-				parameter: parameter,
-				goType: goType,
+				parameter:   parameter,
+				goType:      goType,
 				runtimeType: runtimeType,
 			})
 		}
@@ -182,7 +183,7 @@ var (
 
 		// Write the program.
 		if _, err := fmt.Fprintf(programFile,
-`
+			`
 func Program%d(%s) (%s, error) {
 	val := program%[1]d(%[4]s)
 	return val.Val(), val.Err()
@@ -267,7 +268,7 @@ func repeat[T any](format string, vals []T, mapper func(T) []any) string {
 	return builder.String()
 }
 
-func writeFilef(path string, format string, args... any) error {
+func writeFilef(path string, format string, args ...any) error {
 	runtimeFile, err := os.Create(path)
 	if err != nil {
 		return fmt.Errorf("create %s: %w", path, err)

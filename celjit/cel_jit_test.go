@@ -9,13 +9,13 @@ import (
 	"github.com/google/cel-go/cel"
 )
 
-var tests = []struct{
-	name string
-	expr string
-	paramNames []string
-	paramTypes []*cel.Type
+var tests = []struct {
+	name        string
+	expr        string
+	paramNames  []string
+	paramTypes  []*cel.Type
 	paramValues []any
-	returnType *cel.Type
+	returnType  *cel.Type
 }{
 	{"IntConst", "123", nil, nil, nil, cel.IntType},
 	{"UintConst", "123u", nil, nil, nil, cel.UintType},
@@ -199,7 +199,7 @@ func TestConformance(t *testing.T) {
 				cel.EagerlyValidateDeclarations(true),
 				cel.ExtendedValidations(),
 			)
-			for _, paramName := range test.paramNames{
+			for _, paramName := range test.paramNames {
 				envOpts = append(envOpts, cel.Variable(paramName, cel.DynType))
 			}
 			env, err := cel.NewEnv(envOpts...)
@@ -279,7 +279,7 @@ func BenchmarkCEL(b *testing.B) {
 				cel.EagerlyValidateDeclarations(true),
 				cel.ExtendedValidations(),
 			)
-			for _, paramName := range test.paramNames{
+			for _, paramName := range test.paramNames {
 				envOpts = append(envOpts, cel.Variable(paramName, cel.DynType))
 			}
 			env, err := cel.NewEnv(envOpts...)
@@ -396,7 +396,7 @@ func compileJITTests() ([]any, error) {
 			})
 		}
 		exprConfigs = append(exprConfigs, ExprConfig{
-			Expr: test.expr,
+			Expr:       test.expr,
 			Parameters: params,
 			ReturnType: test.returnType,
 		})
