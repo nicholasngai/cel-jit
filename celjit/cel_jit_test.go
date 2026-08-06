@@ -62,6 +62,7 @@ var tests = []struct {
 	{"LogicalOrErrorFalse", "dyn(1 / 0) || false", nil, nil, nil, cel.BoolType},
 	{"LogicalOrTrueError", "true || dyn(1 / 0)", nil, nil, nil, cel.BoolType},
 	{"LogicalOrFalseError", "false || dyn(1 / 0)", nil, nil, nil, cel.BoolType},
+	{"LogicalNot", "!false", nil, nil, nil, cel.BoolType},
 	{"Equals", "1 == 1", nil, nil, nil, cel.BoolType},
 	{"EqualsNumeric", "1 == dyn(1.0)", nil, nil, nil, cel.BoolType},
 	{"EqualsList", "[1, 2, 3] == [1, 2, 3]", nil, nil, nil, cel.BoolType},

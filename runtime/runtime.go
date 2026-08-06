@@ -55,63 +55,11 @@ func Has(a DynValue, fieldName string) DynValue {
 	return DynValue{Val: aVal.MapIndex(reflect.ValueOf(fieldName)).IsValid()}
 }
 
-func LogicalAnd(a, b DynValue) DynValue {
-	// Unlike most other operators, logical AND may swallow errors if either
-	// input is false.
-	aBool, aOk := a.Val.(bool)
-	bBool, bOk := b.Val.(bool)
-	if aOk && !aBool || bOk && !bBool {
-		return DynValue{Val: false}
-	}
-
+func LogicalNot(a BoolValue) BoolValue {
 	if a.Err != nil {
 		return a
 	}
-	if b.Err != nil {
-		return b
-	}
-
-	if aOk && bOk {
-		return DynValue{Val: true}
-	}
-
-	return DynValue{Err: fmt.Errorf("incompatible types %T and %T", a.Val, b.Val)}
-}
-
-func LogicalOr(a, b DynValue) DynValue {
-	// Unlike most other operators, logical OR may swallow errors if either
-	// input is true.
-	aBool, aOk := a.Val.(bool)
-	bBool, bOk := b.Val.(bool)
-	if aOk && aBool || bOk && bBool {
-		return DynValue{Val: true}
-	}
-
-	if a.Err != nil {
-		return a
-	}
-	if b.Err != nil {
-		return b
-	}
-
-	if aOk && bOk {
-		return DynValue{Val: false}
-	}
-
-	return DynValue{Err: fmt.Errorf("incompatible types %T and %T", a.Val, b.Val)}
-}
-
-func LogicalNot(a DynValue) DynValue {
-	if a.Err != nil {
-		return a
-	}
-
-	aBool, aOk := a.Val.(bool)
-	if !aOk {
-		return DynValue{Err: fmt.Errorf("incompatible type %T", a.Val)}
-	}
-
-	return DynValue{Val: !aBool}
+	return BoolValue{Val: !a.Val}
 }
 
 func Equals(a, b DynValue) DynValue {

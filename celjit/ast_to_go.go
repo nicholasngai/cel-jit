@@ -309,26 +309,69 @@ func astToGoSource(node *expr.Expr, checkedExpr *expr.CheckedExpr) (string, erro
 
 		switch exprKind.CallExpr.GetFunction() {
 		case operators.Conditional:
-			return fmt.Sprintf(`(func() runtime.DynValue {
-				cond := %s.DynValue()
+			resExprType, ok := checkedExpr.GetTypeMap()[node.GetId()]
+			if !ok {
+				return "", fmt.Errorf("no type info for node %d", node.GetId())
+			}
+			resType, err := cel.ExprTypeToType(resExprType)
+			if err != nil {
+				return "", fmt.Errorf("expr type %v to CEL type", resExprType)
+			}
+			_, resRuntimeType, resTypeConverter, err := celTypeToRuntimeTypes(resType)
+			if err != nil {
+				return "", fmt.Errorf("result type %v to runtime types: %w", resType, err)
+			}
+
+			return fmt.Sprintf(`(func() %s {
+				cond := %s.BoolValue()
 				if cond.Err != nil {
-					return cond
+					return %[1]s{Err: cond.Err}
 				}
 
-				if cond.Val == true {
-					return %s.DynValue()
+				if cond.Val {
+					return %[3]s
 				} else {
-					return %s.DynValue()
+					return %[4]s
 				}
 			})()`,
-				argsGo[0], argsGo[1], argsGo[2],
+				resRuntimeType, argsGo[0], resTypeConverter(argsGo[1]), resTypeConverter(argsGo[2]),
 			), nil
 		case operators.LogicalAnd:
-			return fmt.Sprintf("runtime.LogicalAnd(%s.DynValue(), %s.DynValue())", argsGo[0], argsGo[1]), nil
+			return fmt.Sprintf(`(func() runtime.BoolValue {
+				left := %s.BoolValue()
+				if left.Err == nil && !left.Val {
+					return left
+				}
+				right := %s.BoolValue()
+				if right.Err == nil && !right.Val {
+					return right
+				}
+				if left.Err != nil {
+					return left
+				}
+				return right
+			})()`,
+				argsGo[0], argsGo[1],
+			), nil
 		case operators.LogicalOr:
-			return fmt.Sprintf("runtime.LogicalOr(%s.DynValue(), %s.DynValue())", argsGo[0], argsGo[1]), nil
+			return fmt.Sprintf(`(func() runtime.BoolValue {
+				left := %s.BoolValue()
+				if left.Err == nil && left.Val {
+					return left
+				}
+				right := %s.BoolValue()
+				if right.Err == nil && right.Val {
+					return right
+				}
+				if left.Err != nil {
+					return left
+				}
+				return right
+			})()`,
+				argsGo[0], argsGo[1],
+			), nil
 		case operators.LogicalNot:
-			return fmt.Sprintf("runtime.LogicalNot(%s.DynValue())", argsGo[0]), nil
+			return fmt.Sprintf("runtime.LogicalNot(%s.BoolValue())", argsGo[0]), nil
 		case operators.Equals:
 			return fmt.Sprintf("runtime.Equals(%s.DynValue(), %s.DynValue())", argsGo[0], argsGo[1]), nil
 		case operators.NotEquals:
