@@ -70,7 +70,7 @@ func Equals(a, b DynValue) BoolValue {
 		return BoolValue{Err: b.Err}
 	}
 
-	return BoolValue{Val: eq(a.Val, b.Val)}
+	return BoolValue{Val: Eq(a.Val, b.Val)}
 }
 
 func NotEquals(a, b DynValue) BoolValue {
@@ -81,10 +81,10 @@ func NotEquals(a, b DynValue) BoolValue {
 		return BoolValue{Err: b.Err}
 	}
 
-	return BoolValue{Val: !eq(a.Val, b.Val)}
+	return BoolValue{Val: !Eq(a.Val, b.Val)}
 }
 
-func eq(a, b any) bool {
+func Eq(a, b any) bool {
 	// Numeric equality.
 	aInt, aIsInt := a.(int64)
 	bInt, bIsInt := b.(int64)
@@ -172,7 +172,7 @@ func eq(a, b any) bool {
 			return false
 		}
 		for i := range aVal.Len() {
-			if !eq(aVal.Index(i).Interface(), bVal.Index(i).Interface()) {
+			if !Eq(aVal.Index(i).Interface(), bVal.Index(i).Interface()) {
 				return false
 			}
 		}
@@ -192,7 +192,7 @@ func eq(a, b any) bool {
 				bElemVal := bVal.MapIndex(aMapIter.Key())
 				if bElemVal.IsValid() {
 					// Found the element. Check if it's equal.
-					if !eq(aMapIter.Value().Interface(), bElemVal.Interface()) {
+					if !Eq(aMapIter.Value().Interface(), bElemVal.Interface()) {
 						return false
 					}
 				}
@@ -212,13 +212,13 @@ func eq(a, b any) bool {
 			// need to iterate through the keys of b.
 			found := false
 			for bMapIter := bVal.MapRange(); bMapIter.Next(); {
-				if !eq(aMapIter.Key().Interface(), bMapIter.Key().Interface()) {
+				if !Eq(aMapIter.Key().Interface(), bMapIter.Key().Interface()) {
 					continue
 				}
 
 				// Found the element.
 				found = true
-				if !eq(aMapIter.Value().Interface(), bMapIter.Value().Interface()) {
+				if !Eq(aMapIter.Value().Interface(), bMapIter.Value().Interface()) {
 					return false
 				}
 				break
@@ -633,7 +633,7 @@ func Index(a, b DynValue) DynValue {
 		// If this is a key type that supports numeric equality, then we need to
 		// iterate through the keys of b.
 		for aMapIter := aVal.MapRange(); aMapIter.Next(); {
-			if !eq(b.Val, aMapIter.Key().Interface()) {
+			if !Eq(b.Val, aMapIter.Key().Interface()) {
 				continue
 			}
 
@@ -665,7 +665,7 @@ func In(a, b DynValue) DynValue {
 	switch bType.Kind() {
 	case reflect.Slice:
 		for i := range bVal.Len() {
-			if eq(a.Val, bVal.Index(i).Interface()) {
+			if Eq(a.Val, bVal.Index(i).Interface()) {
 				return DynValue{Val: true}
 			}
 		}
@@ -690,7 +690,7 @@ func In(a, b DynValue) DynValue {
 		// If this is a key type that supports numeric equality, then we need to
 		// iterate through the keys of b.
 		for bMapIter := bVal.MapRange(); bMapIter.Next(); {
-			if !eq(a.Val, bMapIter.Key().Interface()) {
+			if !Eq(a.Val, bMapIter.Key().Interface()) {
 				continue
 			}
 

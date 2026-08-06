@@ -34,6 +34,7 @@ type runtimeTypeInfo struct {
 	goType      string
 	runtimeType string
 	converter   func(string) string
+	equaler     func(string, string) string
 }
 
 // celTypeInfo maps CEL types to their JIT runtime types.
@@ -49,6 +50,9 @@ func celTypeInfo(t *cel.Type) (runtimeTypeInfo, error) {
 			runtimeType: fmt.Sprintf("runtime.ListValue[%s]", elemTypeInfo.goType),
 			converter: func(s string) string {
 				return fmt.Sprintf("runtime.ToListValue[%s](%s)", elemTypeInfo.goType, s)
+			},
+			equaler: func(a, b string) string {
+				return fmt.Sprintf("slices.EqualFunc(%s, %s, func(a, b %s) bool { return %s })", a, b, elemTypeInfo.goType, elemTypeInfo.equaler("a", "b"))
 			},
 		}, nil
 	case cel.MapKind:
@@ -66,6 +70,9 @@ func celTypeInfo(t *cel.Type) (runtimeTypeInfo, error) {
 			converter: func(s string) string {
 				return fmt.Sprintf("runtime.ToMapValue[%s, %s](%s)", keyTypeInfo.goType, valTypeInfo.goType, s)
 			},
+			equaler: func(a, b string) string {
+				return fmt.Sprintf("maps.EqualFunc(%s, %s, func(a, b %s) bool { return %s })", a, b, valTypeInfo.goType, valTypeInfo.equaler("a", "b"))
+			},
 		}, nil
 	}
 
@@ -75,60 +82,70 @@ func celTypeInfo(t *cel.Type) (runtimeTypeInfo, error) {
 			goType:      "any",
 			runtimeType: "runtime.DynValue",
 			converter:   func(s string) string { return fmt.Sprintf("%s.DynValue()", s) },
+			equaler:     func(a, b string) string { return fmt.Sprintf("runtime.Eq(%s, %s)", a, b) },
 		}, nil
 	case cel.IntType:
 		return runtimeTypeInfo{
 			goType:      "int64",
 			runtimeType: "runtime.IntValue",
 			converter:   func(s string) string { return fmt.Sprintf("%s.IntValue()", s) },
+			equaler:     func(a, b string) string { return fmt.Sprintf("(%s == %s)", a, b) },
 		}, nil
 	case cel.UintType:
 		return runtimeTypeInfo{
 			goType:      "uint64",
 			runtimeType: "runtime.UintValue",
 			converter:   func(s string) string { return fmt.Sprintf("%s.UintValue()", s) },
+			equaler:     func(a, b string) string { return fmt.Sprintf("(%s == %s)", a, b) },
 		}, nil
 	case cel.DoubleType:
 		return runtimeTypeInfo{
 			goType:      "float64",
 			runtimeType: "runtime.DoubleValue",
 			converter:   func(s string) string { return fmt.Sprintf("%s.DoubleValue()", s) },
+			equaler:     func(a, b string) string { return fmt.Sprintf("(%s == %s)", a, b) },
 		}, nil
 	case cel.BoolType:
 		return runtimeTypeInfo{
 			goType:      "bool",
 			runtimeType: "runtime.BoolValue",
 			converter:   func(s string) string { return fmt.Sprintf("%s.BoolValue()", s) },
+			equaler:     func(a, b string) string { return fmt.Sprintf("(%s == %s)", a, b) },
 		}, nil
 	case cel.StringType:
 		return runtimeTypeInfo{
 			goType:      "string",
 			runtimeType: "runtime.StringValue",
 			converter:   func(s string) string { return fmt.Sprintf("%s.StringValue()", s) },
+			equaler:     func(a, b string) string { return fmt.Sprintf("(%s == %s)", a, b) },
 		}, nil
 	case cel.BytesType:
 		return runtimeTypeInfo{
 			goType:      "[]byte",
 			runtimeType: "runtime.BytesValue",
 			converter:   func(s string) string { return fmt.Sprintf("%s.BytesValue()", s) },
+			equaler:     func(a, b string) string { return fmt.Sprintf("slices.Equal(%s, %s)", a, b) },
 		}, nil
 	case cel.TimestampType:
 		return runtimeTypeInfo{
 			goType:      "time.Time",
 			runtimeType: "runtime.TimestampValue",
 			converter:   func(s string) string { return fmt.Sprintf("%s.TimestampValue()", s) },
+			equaler:     func(a, b string) string { return fmt.Sprintf("%s.Equal(%s)", a, b) },
 		}, nil
 	case cel.DurationType:
 		return runtimeTypeInfo{
 			goType:      "time.Duration",
 			runtimeType: "runtime.DurationValue",
 			converter:   func(s string) string { return fmt.Sprintf("%s.DurationValue()", s) },
+			equaler:     func(a, b string) string { return fmt.Sprintf("(%s == %s))", a, b) },
 		}, nil
 	case cel.NullType:
 		return runtimeTypeInfo{
 			goType:      "struct{}",
 			runtimeType: "runtime.NullValue",
 			converter:   func(s string) string { return fmt.Sprintf("%s.NullValue()", s) },
+			equaler:     func(a, b string) string { return "true" },
 		}, nil
 	default:
 		return runtimeTypeInfo{}, fmt.Errorf("unhandled type %v", t)
@@ -179,7 +196,9 @@ replace github.com/nicholasngai/cel-jit/runtime-source => %s
 
 import (
 	"fmt"
+	"maps"
 	"reflect"
+	"slices"
 	"time"
 
 	"github.com/nicholasngai/cel-jit/runtime-source/runtime"
@@ -187,7 +206,9 @@ import (
 
 var (
 	_ = fmt.Print
+	_ = maps.Equal[map[int]int, map[int]int]
 	_ = reflect.ValueOf
+	_ = slices.Equal[[]int]
 	_ = time.Parse
 )
 `,

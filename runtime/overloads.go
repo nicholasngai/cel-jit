@@ -1,6 +1,569 @@
 package runtime
 
-import "errors"
+import (
+	"bytes"
+	"errors"
+)
+
+func LessInt64(a, b IntValue) BoolValue {
+	if a.Err != nil {
+		return BoolValue{Err: a.Err}
+	}
+	if b.Err != nil {
+		return BoolValue{Err: b.Err}
+	}
+	return BoolValue{Val: a.Val < b.Val}
+}
+
+func LessInt64Uint64(a IntValue, b UintValue) BoolValue {
+	if a.Err != nil {
+		return BoolValue{Err: a.Err}
+	}
+	if b.Err != nil {
+		return BoolValue{Err: b.Err}
+	}
+	return BoolValue{Val: a.Val < 0 || uint64(a.Val) < b.Val}
+}
+
+func LessInt64Double(a IntValue, b DoubleValue) BoolValue {
+	if a.Err != nil {
+		return BoolValue{Err: a.Err}
+	}
+	if b.Err != nil {
+		return BoolValue{Err: b.Err}
+	}
+	return BoolValue{Val: float64(a.Val) < b.Val}
+}
+
+func LessUint64(a, b UintValue) BoolValue {
+	if a.Err != nil {
+		return BoolValue{Err: a.Err}
+	}
+	if b.Err != nil {
+		return BoolValue{Err: b.Err}
+	}
+	return BoolValue{Val: a.Val < b.Val}
+}
+
+func LessUint64Int64(a UintValue, b IntValue) BoolValue {
+	if a.Err != nil {
+		return BoolValue{Err: a.Err}
+	}
+	if b.Err != nil {
+		return BoolValue{Err: b.Err}
+	}
+	return BoolValue{Val: b.Val >= 0 && a.Val < uint64(b.Val)}
+}
+
+func LessUint64Double(a UintValue, b DoubleValue) BoolValue {
+	if a.Err != nil {
+		return BoolValue{Err: a.Err}
+	}
+	if b.Err != nil {
+		return BoolValue{Err: b.Err}
+	}
+	return BoolValue{Val: float64(a.Val) < b.Val}
+}
+
+func LessDouble(a, b DoubleValue) BoolValue {
+	if a.Err != nil {
+		return BoolValue{Err: a.Err}
+	}
+	if b.Err != nil {
+		return BoolValue{Err: b.Err}
+	}
+	return BoolValue{Val: a.Val < b.Val}
+}
+
+func LessDoubleInt64(a DoubleValue, b IntValue) BoolValue {
+	if a.Err != nil {
+		return BoolValue{Err: a.Err}
+	}
+	if b.Err != nil {
+		return BoolValue{Err: b.Err}
+	}
+	return BoolValue{Val: a.Val < float64(b.Val)}
+}
+
+func LessDoubleUint64(a DoubleValue, b UintValue) BoolValue {
+	if a.Err != nil {
+		return BoolValue{Err: a.Err}
+	}
+	if b.Err != nil {
+		return BoolValue{Err: b.Err}
+	}
+	return BoolValue{Val: a.Val < float64(b.Val)}
+}
+
+func LessBool(a, b BoolValue) BoolValue {
+	if a.Err != nil {
+		return BoolValue{Err: a.Err}
+	}
+	if b.Err != nil {
+		return BoolValue{Err: b.Err}
+	}
+	return BoolValue{Val: !a.Val && b.Val}
+}
+
+func LessString(a, b StringValue) BoolValue {
+	if a.Err != nil {
+		return BoolValue{Err: a.Err}
+	}
+	if b.Err != nil {
+		return BoolValue{Err: b.Err}
+	}
+	return BoolValue{Val: a.Val < b.Val}
+}
+
+func LessBytes(a, b BytesValue) BoolValue {
+	if a.Err != nil {
+		return BoolValue{Err: a.Err}
+	}
+	if b.Err != nil {
+		return BoolValue{Err: b.Err}
+	}
+	return BoolValue{Val: bytes.Compare(a.Val, b.Val) < 0}
+}
+
+func LessTimestamp(a, b TimestampValue) BoolValue {
+	if a.Err != nil {
+		return BoolValue{Err: a.Err}
+	}
+	if b.Err != nil {
+		return BoolValue{Err: b.Err}
+	}
+	return BoolValue{Val: a.Val.Compare(b.Val) < 0}
+}
+
+func LessDuration(a, b DurationValue) BoolValue {
+	if a.Err != nil {
+		return BoolValue{Err: a.Err}
+	}
+	if b.Err != nil {
+		return BoolValue{Err: b.Err}
+	}
+	return BoolValue{Val: a.Val < b.Val}
+}
+
+func LessEqualsInt64(a, b IntValue) BoolValue {
+	if a.Err != nil {
+		return BoolValue{Err: a.Err}
+	}
+	if b.Err != nil {
+		return BoolValue{Err: b.Err}
+	}
+	return BoolValue{Val: a.Val <= b.Val}
+}
+
+func LessEqualsInt64Uint64(a IntValue, b UintValue) BoolValue {
+	if a.Err != nil {
+		return BoolValue{Err: a.Err}
+	}
+	if b.Err != nil {
+		return BoolValue{Err: b.Err}
+	}
+	return BoolValue{Val: a.Val < 0 || uint64(a.Val) <= b.Val}
+}
+
+func LessEqualsInt64Double(a IntValue, b DoubleValue) BoolValue {
+	if a.Err != nil {
+		return BoolValue{Err: a.Err}
+	}
+	if b.Err != nil {
+		return BoolValue{Err: b.Err}
+	}
+	return BoolValue{Val: float64(a.Val) <= b.Val}
+}
+
+func LessEqualsUint64(a, b UintValue) BoolValue {
+	if a.Err != nil {
+		return BoolValue{Err: a.Err}
+	}
+	if b.Err != nil {
+		return BoolValue{Err: b.Err}
+	}
+	return BoolValue{Val: a.Val <= b.Val}
+}
+
+func LessEqualsUint64Int64(a UintValue, b IntValue) BoolValue {
+	if a.Err != nil {
+		return BoolValue{Err: a.Err}
+	}
+	if b.Err != nil {
+		return BoolValue{Err: b.Err}
+	}
+	return BoolValue{Val: b.Val >= 0 && a.Val <= uint64(b.Val)}
+}
+
+func LessEqualsUint64Double(a UintValue, b DoubleValue) BoolValue {
+	if a.Err != nil {
+		return BoolValue{Err: a.Err}
+	}
+	if b.Err != nil {
+		return BoolValue{Err: b.Err}
+	}
+	return BoolValue{Val: float64(a.Val) <= b.Val}
+}
+
+func LessEqualsDouble(a, b DoubleValue) BoolValue {
+	if a.Err != nil {
+		return BoolValue{Err: a.Err}
+	}
+	if b.Err != nil {
+		return BoolValue{Err: b.Err}
+	}
+	return BoolValue{Val: a.Val <= b.Val}
+}
+
+func LessEqualsDoubleInt64(a DoubleValue, b IntValue) BoolValue {
+	if a.Err != nil {
+		return BoolValue{Err: a.Err}
+	}
+	if b.Err != nil {
+		return BoolValue{Err: b.Err}
+	}
+	return BoolValue{Val: a.Val <= float64(b.Val)}
+}
+
+func LessEqualsDoubleUint64(a DoubleValue, b UintValue) BoolValue {
+	if a.Err != nil {
+		return BoolValue{Err: a.Err}
+	}
+	if b.Err != nil {
+		return BoolValue{Err: b.Err}
+	}
+	return BoolValue{Val: a.Val <= float64(b.Val)}
+}
+
+func LessEqualsBool(a, b BoolValue) BoolValue {
+	if a.Err != nil {
+		return BoolValue{Err: a.Err}
+	}
+	if b.Err != nil {
+		return BoolValue{Err: b.Err}
+	}
+	return BoolValue{Val: !a.Val || b.Val}
+}
+
+func LessEqualsString(a, b StringValue) BoolValue {
+	if a.Err != nil {
+		return BoolValue{Err: a.Err}
+	}
+	if b.Err != nil {
+		return BoolValue{Err: b.Err}
+	}
+	return BoolValue{Val: a.Val <= b.Val}
+}
+
+func LessEqualsBytes(a, b BytesValue) BoolValue {
+	if a.Err != nil {
+		return BoolValue{Err: a.Err}
+	}
+	if b.Err != nil {
+		return BoolValue{Err: b.Err}
+	}
+	return BoolValue{Val: bytes.Compare(a.Val, b.Val) <= 0}
+}
+
+func LessEqualsTimestamp(a, b TimestampValue) BoolValue {
+	if a.Err != nil {
+		return BoolValue{Err: a.Err}
+	}
+	if b.Err != nil {
+		return BoolValue{Err: b.Err}
+	}
+	return BoolValue{Val: a.Val.Compare(b.Val) <= 0}
+}
+
+func LessEqualsDuration(a, b DurationValue) BoolValue {
+	if a.Err != nil {
+		return BoolValue{Err: a.Err}
+	}
+	if b.Err != nil {
+		return BoolValue{Err: b.Err}
+	}
+	return BoolValue{Val: a.Val <= b.Val}
+}
+
+func GreaterInt64(a, b IntValue) BoolValue {
+	if a.Err != nil {
+		return BoolValue{Err: a.Err}
+	}
+	if b.Err != nil {
+		return BoolValue{Err: b.Err}
+	}
+	return BoolValue{Val: a.Val > b.Val}
+}
+
+func GreaterInt64Uint64(a IntValue, b UintValue) BoolValue {
+	if a.Err != nil {
+		return BoolValue{Err: a.Err}
+	}
+	if b.Err != nil {
+		return BoolValue{Err: b.Err}
+	}
+	return BoolValue{Val: a.Val >= 0 && uint64(a.Val) > b.Val}
+}
+
+func GreaterInt64Double(a IntValue, b DoubleValue) BoolValue {
+	if a.Err != nil {
+		return BoolValue{Err: a.Err}
+	}
+	if b.Err != nil {
+		return BoolValue{Err: b.Err}
+	}
+	return BoolValue{Val: float64(a.Val) > b.Val}
+}
+
+func GreaterUint64(a, b UintValue) BoolValue {
+	if a.Err != nil {
+		return BoolValue{Err: a.Err}
+	}
+	if b.Err != nil {
+		return BoolValue{Err: b.Err}
+	}
+	return BoolValue{Val: a.Val > b.Val}
+}
+
+func GreaterUint64Int64(a UintValue, b IntValue) BoolValue {
+	if a.Err != nil {
+		return BoolValue{Err: a.Err}
+	}
+	if b.Err != nil {
+		return BoolValue{Err: b.Err}
+	}
+	return BoolValue{Val: b.Val < 0 || a.Val > uint64(b.Val)}
+}
+
+func GreaterUint64Double(a UintValue, b DoubleValue) BoolValue {
+	if a.Err != nil {
+		return BoolValue{Err: a.Err}
+	}
+	if b.Err != nil {
+		return BoolValue{Err: b.Err}
+	}
+	return BoolValue{Val: float64(a.Val) > b.Val}
+}
+
+func GreaterDouble(a, b DoubleValue) BoolValue {
+	if a.Err != nil {
+		return BoolValue{Err: a.Err}
+	}
+	if b.Err != nil {
+		return BoolValue{Err: b.Err}
+	}
+	return BoolValue{Val: a.Val > b.Val}
+}
+
+func GreaterDoubleInt64(a DoubleValue, b IntValue) BoolValue {
+	if a.Err != nil {
+		return BoolValue{Err: a.Err}
+	}
+	if b.Err != nil {
+		return BoolValue{Err: b.Err}
+	}
+	return BoolValue{Val: a.Val > float64(b.Val)}
+}
+
+func GreaterDoubleUint64(a DoubleValue, b UintValue) BoolValue {
+	if a.Err != nil {
+		return BoolValue{Err: a.Err}
+	}
+	if b.Err != nil {
+		return BoolValue{Err: b.Err}
+	}
+	return BoolValue{Val: a.Val > float64(b.Val)}
+}
+
+func GreaterBool(a, b BoolValue) BoolValue {
+	if a.Err != nil {
+		return BoolValue{Err: a.Err}
+	}
+	if b.Err != nil {
+		return BoolValue{Err: b.Err}
+	}
+	return BoolValue{Val: a.Val && !b.Val}
+}
+
+func GreaterString(a, b StringValue) BoolValue {
+	if a.Err != nil {
+		return BoolValue{Err: a.Err}
+	}
+	if b.Err != nil {
+		return BoolValue{Err: b.Err}
+	}
+	return BoolValue{Val: a.Val > b.Val}
+}
+
+func GreaterBytes(a, b BytesValue) BoolValue {
+	if a.Err != nil {
+		return BoolValue{Err: a.Err}
+	}
+	if b.Err != nil {
+		return BoolValue{Err: b.Err}
+	}
+	return BoolValue{Val: bytes.Compare(a.Val, b.Val) > 0}
+}
+
+func GreaterTimestamp(a, b TimestampValue) BoolValue {
+	if a.Err != nil {
+		return BoolValue{Err: a.Err}
+	}
+	if b.Err != nil {
+		return BoolValue{Err: b.Err}
+	}
+	return BoolValue{Val: a.Val.Compare(b.Val) > 0}
+}
+
+func GreaterDuration(a, b DurationValue) BoolValue {
+	if a.Err != nil {
+		return BoolValue{Err: a.Err}
+	}
+	if b.Err != nil {
+		return BoolValue{Err: b.Err}
+	}
+	return BoolValue{Val: a.Val > b.Val}
+}
+
+func GreaterEqualsInt64(a, b IntValue) BoolValue {
+	if a.Err != nil {
+		return BoolValue{Err: a.Err}
+	}
+	if b.Err != nil {
+		return BoolValue{Err: b.Err}
+	}
+	return BoolValue{Val: a.Val >= b.Val}
+}
+
+func GreaterEqualsInt64Uint64(a IntValue, b UintValue) BoolValue {
+	if a.Err != nil {
+		return BoolValue{Err: a.Err}
+	}
+	if b.Err != nil {
+		return BoolValue{Err: b.Err}
+	}
+	return BoolValue{Val: a.Val >= 0 && uint64(a.Val) >= b.Val}
+}
+
+func GreaterEqualsInt64Double(a IntValue, b DoubleValue) BoolValue {
+	if a.Err != nil {
+		return BoolValue{Err: a.Err}
+	}
+	if b.Err != nil {
+		return BoolValue{Err: b.Err}
+	}
+	return BoolValue{Val: float64(a.Val) >= b.Val}
+}
+
+func GreaterEqualsUint64(a, b UintValue) BoolValue {
+	if a.Err != nil {
+		return BoolValue{Err: a.Err}
+	}
+	if b.Err != nil {
+		return BoolValue{Err: b.Err}
+	}
+	return BoolValue{Val: a.Val >= b.Val}
+}
+
+func GreaterEqualsUint64Int64(a UintValue, b IntValue) BoolValue {
+	if a.Err != nil {
+		return BoolValue{Err: a.Err}
+	}
+	if b.Err != nil {
+		return BoolValue{Err: b.Err}
+	}
+	return BoolValue{Val: b.Val < 0 || a.Val >= uint64(b.Val)}
+}
+
+func GreaterEqualsUint64Double(a UintValue, b DoubleValue) BoolValue {
+	if a.Err != nil {
+		return BoolValue{Err: a.Err}
+	}
+	if b.Err != nil {
+		return BoolValue{Err: b.Err}
+	}
+	return BoolValue{Val: float64(a.Val) >= b.Val}
+}
+
+func GreaterEqualsDouble(a, b DoubleValue) BoolValue {
+	if a.Err != nil {
+		return BoolValue{Err: a.Err}
+	}
+	if b.Err != nil {
+		return BoolValue{Err: b.Err}
+	}
+	return BoolValue{Val: a.Val >= b.Val}
+}
+
+func GreaterEqualsDoubleInt64(a DoubleValue, b IntValue) BoolValue {
+	if a.Err != nil {
+		return BoolValue{Err: a.Err}
+	}
+	if b.Err != nil {
+		return BoolValue{Err: b.Err}
+	}
+	return BoolValue{Val: a.Val >= float64(b.Val)}
+}
+
+func GreaterEqualsDoubleUint64(a DoubleValue, b UintValue) BoolValue {
+	if a.Err != nil {
+		return BoolValue{Err: a.Err}
+	}
+	if b.Err != nil {
+		return BoolValue{Err: b.Err}
+	}
+	return BoolValue{Val: a.Val >= float64(b.Val)}
+}
+
+func GreaterEqualsBool(a, b BoolValue) BoolValue {
+	if a.Err != nil {
+		return BoolValue{Err: a.Err}
+	}
+	if b.Err != nil {
+		return BoolValue{Err: b.Err}
+	}
+	return BoolValue{Val: a.Val || !b.Val}
+}
+
+func GreaterEqualsString(a, b StringValue) BoolValue {
+	if a.Err != nil {
+		return BoolValue{Err: a.Err}
+	}
+	if b.Err != nil {
+		return BoolValue{Err: b.Err}
+	}
+	return BoolValue{Val: a.Val >= b.Val}
+}
+
+func GreaterEqualsBytes(a, b BytesValue) BoolValue {
+	if a.Err != nil {
+		return BoolValue{Err: a.Err}
+	}
+	if b.Err != nil {
+		return BoolValue{Err: b.Err}
+	}
+	return BoolValue{Val: bytes.Compare(a.Val, b.Val) >= 0}
+}
+
+func GreaterEqualsTimestamp(a, b TimestampValue) BoolValue {
+	if a.Err != nil {
+		return BoolValue{Err: a.Err}
+	}
+	if b.Err != nil {
+		return BoolValue{Err: b.Err}
+	}
+	return BoolValue{Val: a.Val.Compare(b.Val) >= 0}
+}
+
+func GreaterEqualsDuration(a, b DurationValue) BoolValue {
+	if a.Err != nil {
+		return BoolValue{Err: a.Err}
+	}
+	if b.Err != nil {
+		return BoolValue{Err: b.Err}
+	}
+	return BoolValue{Val: a.Val >= b.Val}
+}
 
 func AddInt64(a, b IntValue) IntValue {
 	if a.Err != nil {

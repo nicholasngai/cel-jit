@@ -372,18 +372,188 @@ func astToGoSource(node *expr.Expr, checkedExpr *expr.CheckedExpr) (string, erro
 			), nil
 		case operators.LogicalNot:
 			return fmt.Sprintf("runtime.LogicalNot(%s.BoolValue())", argsGo[0]), nil
-		case operators.Equals:
-			return fmt.Sprintf("runtime.Equals(%s.DynValue(), %s.DynValue())", argsGo[0], argsGo[1]), nil
-		case operators.NotEquals:
-			return fmt.Sprintf("runtime.NotEquals(%s.DynValue(), %s.DynValue())", argsGo[0], argsGo[1]), nil
+		case operators.Equals, operators.NotEquals:
+			// If the types aren't the same, fall back to dynamic type checking.
+			leftExprType, ok := checkedExpr.GetTypeMap()[exprKind.CallExpr.GetArgs()[0].GetId()]
+			if !ok {
+				return "", fmt.Errorf("no type info for node %d", node.GetId())
+			}
+			leftType, err := cel.ExprTypeToType(leftExprType)
+			if err != nil {
+				return "", fmt.Errorf("expr type %v to CEL type", leftExprType)
+			}
+			leftTypeInfo, err := celTypeInfo(leftType)
+			if err != nil {
+				return "", fmt.Errorf("left type %v to runtime types: %w", leftType, err)
+			}
+			rightExprType, ok := checkedExpr.GetTypeMap()[exprKind.CallExpr.GetArgs()[1].GetId()]
+			if !ok {
+				return "", fmt.Errorf("no type info for node %d", node.GetId())
+			}
+			rightType, err := cel.ExprTypeToType(rightExprType)
+			if err != nil {
+				return "", fmt.Errorf("expr type %v to CEL type", rightExprType)
+			}
+			if !rightType.IsExactType(leftType) {
+				if exprKind.CallExpr.GetFunction() == operators.Equals {
+					return fmt.Sprintf("runtime.Equals(%s.DynValue(), %s.DynValue())", argsGo[0], argsGo[1]), nil
+				} else {
+					return fmt.Sprintf("runtime.NotEquals(%s.DynValue(), %s.DynValue())", argsGo[0], argsGo[1]), nil
+				}
+			}
+
+			negaterIfNotEquals := ""
+			if exprKind.CallExpr.GetFunction() == operators.NotEquals {
+				negaterIfNotEquals = "!"
+			}
+			return fmt.Sprintf(`(func() runtime.BoolValue {
+				left := %s
+				right := %s
+				if left.Err != nil {
+					return runtime.BoolValue{Err: left.Err}
+				}
+				if right.Err != nil {
+					return runtime.BoolValue{Err: right.Err}
+				}
+				return runtime.BoolValue{Val: %s%s}
+			})()`,
+				argsGo[0],
+				argsGo[1],
+				negaterIfNotEquals,
+				leftTypeInfo.equaler("left.Val", "right.Val"),
+			), nil
 		case operators.Less:
-			return fmt.Sprintf("runtime.Less(%s.DynValue(), %s.DynValue())", argsGo[0], argsGo[1]), nil
+			switch extractOverloadID(checkedExpr.GetReferenceMap()[node.GetId()].GetOverloadId()) {
+			case overloads.LessInt64:
+				return fmt.Sprintf("runtime.LessInt64(%s.IntValue(), %s.IntValue())", argsGo[0], argsGo[1]), nil
+			case overloads.LessInt64Uint64:
+				return fmt.Sprintf("runtime.LessInt64Uint64(%s.IntValue(), %s.UintValue())", argsGo[0], argsGo[1]), nil
+			case overloads.LessInt64Double:
+				return fmt.Sprintf("runtime.LessInt64Double(%s.IntValue(), %s.DoubleValue())", argsGo[0], argsGo[1]), nil
+			case overloads.LessUint64:
+				return fmt.Sprintf("runtime.LessUint64(%s.UintValue(), %s.UintValue())", argsGo[0], argsGo[1]), nil
+			case overloads.LessUint64Int64:
+				return fmt.Sprintf("runtime.LessUint64Int64(%s.UintValue(), %s.IntValue())", argsGo[0], argsGo[1]), nil
+			case overloads.LessUint64Double:
+				return fmt.Sprintf("runtime.LessUint64Double(%s.UintValue(), %s.DoubleValue())", argsGo[0], argsGo[1]), nil
+			case overloads.LessDouble:
+				return fmt.Sprintf("runtime.LessDouble(%s.DoubleValue(), %s.DoubleValue())", argsGo[0], argsGo[1]), nil
+			case overloads.LessDoubleInt64:
+				return fmt.Sprintf("runtime.LessDoubleInt64(%s.DoubleValue(), %s.IntValue())", argsGo[0], argsGo[1]), nil
+			case overloads.LessDoubleUint64:
+				return fmt.Sprintf("runtime.LessDoubleUint64(%s.DoubleValue(), %s.UintValue())", argsGo[0], argsGo[1]), nil
+			case overloads.LessBool:
+				return fmt.Sprintf("runtime.LessBool(%s.BoolValue(), %s.BoolValue())", argsGo[0], argsGo[1]), nil
+			case overloads.LessString:
+				return fmt.Sprintf("runtime.LessString(%s.StringValue(), %s.StringValue())", argsGo[0], argsGo[1]), nil
+			case overloads.LessBytes:
+				return fmt.Sprintf("runtime.LessBytes(%s.BytesValue(), %s.BytesValue())", argsGo[0], argsGo[1]), nil
+			case overloads.LessTimestamp:
+				return fmt.Sprintf("runtime.LessTimestamp(%s.TimestampValue(), %s.TimestampValue())", argsGo[0], argsGo[1]), nil
+			case overloads.LessDuration:
+				return fmt.Sprintf("runtime.LessDuration(%s.DurationValue(), %s.DurationValue())", argsGo[0], argsGo[1]), nil
+			case overloads.LessEqualsInt64:
+				return fmt.Sprintf("runtime.LessEqualsInt64(%s.IntValue(), %s.IntValue())", argsGo[0], argsGo[1]), nil
+			case overloads.LessEqualsInt64Uint64:
+				return fmt.Sprintf("runtime.LessEqualsInt64Uint64(%s.IntValue(), %s.UintValue())", argsGo[0], argsGo[1]), nil
+			default:
+				return fmt.Sprintf("runtime.Less(%s.DynValue(), %s.DynValue())", argsGo[0], argsGo[1]), nil
+			}
 		case operators.LessEquals:
-			return fmt.Sprintf("runtime.LessEquals(%s.DynValue(), %s.DynValue())", argsGo[0], argsGo[1]), nil
+			switch extractOverloadID(checkedExpr.GetReferenceMap()[node.GetId()].GetOverloadId()) {
+			case overloads.LessEqualsInt64Double:
+				return fmt.Sprintf("runtime.LessEqualsInt64Double(%s.IntValue(), %s.DoubleValue())", argsGo[0], argsGo[1]), nil
+			case overloads.LessEqualsUint64:
+				return fmt.Sprintf("runtime.LessEqualsUint64(%s.UintValue(), %s.UintValue())", argsGo[0], argsGo[1]), nil
+			case overloads.LessEqualsUint64Int64:
+				return fmt.Sprintf("runtime.LessEqualsUint64Int64(%s.UintValue(), %s.IntValue())", argsGo[0], argsGo[1]), nil
+			case overloads.LessEqualsUint64Double:
+				return fmt.Sprintf("runtime.LessEqualsUint64Double(%s.UintValue(), %s.DoubleValue())", argsGo[0], argsGo[1]), nil
+			case overloads.LessEqualsDouble:
+				return fmt.Sprintf("runtime.LessEqualsDouble(%s.DoubleValue(), %s.DoubleValue())", argsGo[0], argsGo[1]), nil
+			case overloads.LessEqualsDoubleInt64:
+				return fmt.Sprintf("runtime.LessEqualsDoubleInt64(%s.DoubleValue(), %s.IntValue())", argsGo[0], argsGo[1]), nil
+			case overloads.LessEqualsDoubleUint64:
+				return fmt.Sprintf("runtime.LessEqualsDoubleUint64(%s.DoubleValue(), %s.UintValue())", argsGo[0], argsGo[1]), nil
+			case overloads.LessEqualsBool:
+				return fmt.Sprintf("runtime.LessEqualsBool(%s.BoolValue(), %s.BoolValue())", argsGo[0], argsGo[1]), nil
+			case overloads.LessEqualsString:
+				return fmt.Sprintf("runtime.LessEqualsString(%s.StringValue(), %s.StringValue())", argsGo[0], argsGo[1]), nil
+			case overloads.LessEqualsBytes:
+				return fmt.Sprintf("runtime.LessEqualsBytes(%s.BytesValue(), %s.BytesValue())", argsGo[0], argsGo[1]), nil
+			case overloads.LessEqualsTimestamp:
+				return fmt.Sprintf("runtime.LessEqualsTimestamp(%s.TimestampValue(), %s.TimestampValue())", argsGo[0], argsGo[1]), nil
+			case overloads.LessEqualsDuration:
+				return fmt.Sprintf("runtime.LessEqualsDuration(%s.DurationValue(), %s.DurationValue())", argsGo[0], argsGo[1]), nil
+			default:
+				return fmt.Sprintf("runtime.LessEquals(%s.DynValue(), %s.DynValue())", argsGo[0], argsGo[1]), nil
+			}
 		case operators.Greater:
-			return fmt.Sprintf("runtime.Greater(%s.DynValue(), %s.DynValue())", argsGo[0], argsGo[1]), nil
+			switch extractOverloadID(checkedExpr.GetReferenceMap()[node.GetId()].GetOverloadId()) {
+			case overloads.GreaterInt64:
+				return fmt.Sprintf("runtime.GreaterInt64(%s.IntValue(), %s.IntValue())", argsGo[0], argsGo[1]), nil
+			case overloads.GreaterInt64Uint64:
+				return fmt.Sprintf("runtime.GreaterInt64Uint64(%s.IntValue(), %s.UintValue())", argsGo[0], argsGo[1]), nil
+			case overloads.GreaterInt64Double:
+				return fmt.Sprintf("runtime.GreaterInt64Double(%s.IntValue(), %s.DoubleValue())", argsGo[0], argsGo[1]), nil
+			case overloads.GreaterUint64:
+				return fmt.Sprintf("runtime.GreaterUint64(%s.UintValue(), %s.UintValue())", argsGo[0], argsGo[1]), nil
+			case overloads.GreaterUint64Int64:
+				return fmt.Sprintf("runtime.GreaterUint64Int64(%s.UintValue(), %s.IntValue())", argsGo[0], argsGo[1]), nil
+			case overloads.GreaterUint64Double:
+				return fmt.Sprintf("runtime.GreaterUint64Double(%s.UintValue(), %s.DoubleValue())", argsGo[0], argsGo[1]), nil
+			case overloads.GreaterDouble:
+				return fmt.Sprintf("runtime.GreaterDouble(%s.DoubleValue(), %s.DoubleValue())", argsGo[0], argsGo[1]), nil
+			case overloads.GreaterDoubleInt64:
+				return fmt.Sprintf("runtime.GreaterDoubleInt64(%s.DoubleValue(), %s.IntValue())", argsGo[0], argsGo[1]), nil
+			case overloads.GreaterDoubleUint64:
+				return fmt.Sprintf("runtime.GreaterDoubleUint64(%s.DoubleValue(), %s.UintValue())", argsGo[0], argsGo[1]), nil
+			case overloads.GreaterBool:
+				return fmt.Sprintf("runtime.GreaterBool(%s.BoolValue(), %s.BoolValue())", argsGo[0], argsGo[1]), nil
+			case overloads.GreaterString:
+				return fmt.Sprintf("runtime.GreaterString(%s.StringValue(), %s.StringValue())", argsGo[0], argsGo[1]), nil
+			case overloads.GreaterBytes:
+				return fmt.Sprintf("runtime.GreaterBytes(%s.BytesValue(), %s.BytesValue())", argsGo[0], argsGo[1]), nil
+			case overloads.GreaterTimestamp:
+				return fmt.Sprintf("runtime.GreaterTimestamp(%s.TimestampValue(), %s.TimestampValue())", argsGo[0], argsGo[1]), nil
+			case overloads.GreaterDuration:
+				return fmt.Sprintf("runtime.GreaterDuration(%s.DurationValue(), %s.DurationValue())", argsGo[0], argsGo[1]), nil
+			default:
+				return fmt.Sprintf("runtime.Greater(%s.DynValue(), %s.DynValue())", argsGo[0], argsGo[1]), nil
+			}
 		case operators.GreaterEquals:
-			return fmt.Sprintf("runtime.GreaterEquals(%s.DynValue(), %s.DynValue())", argsGo[0], argsGo[1]), nil
+			switch extractOverloadID(checkedExpr.GetReferenceMap()[node.GetId()].GetOverloadId()) {
+			case overloads.GreaterEqualsInt64:
+				return fmt.Sprintf("runtime.GreaterEqualsInt64(%s.IntValue(), %s.IntValue())", argsGo[0], argsGo[1]), nil
+			case overloads.GreaterEqualsInt64Uint64:
+				return fmt.Sprintf("runtime.GreaterEqualsInt64Uint64(%s.IntValue(), %s.UintValue())", argsGo[0], argsGo[1]), nil
+			case overloads.GreaterEqualsInt64Double:
+				return fmt.Sprintf("runtime.GreaterEqualsInt64Double(%s.IntValue(), %s.DoubleValue())", argsGo[0], argsGo[1]), nil
+			case overloads.GreaterEqualsUint64:
+				return fmt.Sprintf("runtime.GreaterEqualsUint64(%s.UintValue(), %s.UintValue())", argsGo[0], argsGo[1]), nil
+			case overloads.GreaterEqualsUint64Int64:
+				return fmt.Sprintf("runtime.GreaterEqualsUint64Int64(%s.UintValue(), %s.IntValue())", argsGo[0], argsGo[1]), nil
+			case overloads.GreaterEqualsUint64Double:
+				return fmt.Sprintf("runtime.GreaterEqualsUint64Double(%s.UintValue(), %s.DoubleValue())", argsGo[0], argsGo[1]), nil
+			case overloads.GreaterEqualsDouble:
+				return fmt.Sprintf("runtime.GreaterEqualsDouble(%s.DoubleValue(), %s.DoubleValue())", argsGo[0], argsGo[1]), nil
+			case overloads.GreaterEqualsDoubleInt64:
+				return fmt.Sprintf("runtime.GreaterEqualsDoubleInt64(%s.DoubleValue(), %s.IntValue())", argsGo[0], argsGo[1]), nil
+			case overloads.GreaterEqualsDoubleUint64:
+				return fmt.Sprintf("runtime.GreaterEqualsDoubleUint64(%s.DoubleValue(), %s.UintValue())", argsGo[0], argsGo[1]), nil
+			case overloads.GreaterEqualsBool:
+				return fmt.Sprintf("runtime.GreaterEqualsBool(%s.BoolValue(), %s.BoolValue())", argsGo[0], argsGo[1]), nil
+			case overloads.GreaterEqualsString:
+				return fmt.Sprintf("runtime.GreaterEqualsString(%s.StringValue(), %s.StringValue())", argsGo[0], argsGo[1]), nil
+			case overloads.GreaterEqualsBytes:
+				return fmt.Sprintf("runtime.GreaterEqualsBytes(%s.BytesValue(), %s.BytesValue())", argsGo[0], argsGo[1]), nil
+			case overloads.GreaterEqualsTimestamp:
+				return fmt.Sprintf("runtime.GreaterEqualsTimestamp(%s.TimestampValue(), %s.TimestampValue())", argsGo[0], argsGo[1]), nil
+			case overloads.GreaterEqualsDuration:
+				return fmt.Sprintf("runtime.GreaterEqualsDuration(%s.DurationValue(), %s.DurationValue())", argsGo[0], argsGo[1]), nil
+			default:
+				return fmt.Sprintf("runtime.GreaterEquals(%s.DynValue(), %s.DynValue())", argsGo[0], argsGo[1]), nil
+			}
 		case operators.Add:
 			switch extractOverloadID(checkedExpr.GetReferenceMap()[node.GetId()].GetOverloadId()) {
 			case overloads.AddInt64:
