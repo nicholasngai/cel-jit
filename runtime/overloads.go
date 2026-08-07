@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"math"
 )
 
 func LessInt64(a, b IntValue) BoolValue {
@@ -838,8 +839,84 @@ func IndexMap[K comparable, V any, KVal ~struct{Val K; Err error}, Val ~struct{V
 	}
 
 	elem, ok := a.Val[bStruct.Val]
-	if !ok {
-		return Val{Err: fmt.Errorf("no such key %v", bStruct.Val)}
+	if ok {
+		return Val{Val: elem}
 	}
-	return Val{Val: elem}
+
+	// Handle numeric equality for int and uint types as map keys.
+	switch b := any(bStruct.Val).(type) {
+	case int64:
+		if b >= 0 {
+			switch a := any(a.Val).(type) {
+			case map[any]V:
+				if elem, ok := a[uint64(b)]; ok {
+					return Val{Val: elem}
+				}
+			}
+		}
+	case uint64:
+		if b <= math.MaxInt64 {
+			switch a := any(a.Val).(type) {
+			case map[any]V:
+				if elem, ok := a[int64(b)]; ok {
+					return Val{Val: elem}
+				}
+			}
+		}
+	}
+
+	return Val{Err: fmt.Errorf("no such key %v", bStruct.Val)}
+}
+
+func InList[T any, U any, Val ~struct{Val U; Err error}](a Val, b ListValue[T]) BoolValue {
+	aStruct := (struct{Val U; Err error})(a)
+	if aStruct.Err != nil {
+		return BoolValue{Err: aStruct.Err}
+	}
+	if b.Err != nil {
+		return BoolValue{Err: b.Err}
+	}
+	for _, elem := range b.Val {
+		if Eq(elem, aStruct.Val) {
+			return BoolValue{Val: true}
+		}
+	}
+	return BoolValue{Val: false}
+}
+
+func InMap[K comparable, V any, KVal ~struct{Val K; Err error}](a KVal, b MapValue[K, V]) BoolValue {
+	aStruct := (struct{Val K; Err error})(a)
+	if aStruct.Err != nil {
+		return BoolValue{Err: aStruct.Err}
+	}
+	if b.Err != nil {
+		return BoolValue{Err: b.Err}
+	}
+	if _, ok := b.Val[aStruct.Val]; ok {
+		return BoolValue{Val: true}
+	}
+
+	// Handle numeric equality for int and uint types as map keys.
+	switch a := any(aStruct.Val).(type) {
+	case int64:
+		if a >= 0 {
+			switch b := any(b.Val).(type) {
+			case map[any]V:
+				if _, ok := b[uint64(a)]; ok {
+					return BoolValue{Val: true}
+				}
+			}
+		}
+	case uint64:
+		if a <= math.MaxInt64 {
+			switch b := any(b.Val).(type) {
+			case map[any]V:
+				if _, ok := b[int64(a)]; ok {
+					return BoolValue{Val: true}
+				}
+			}
+		}
+	}
+
+	return BoolValue{Val: false}
 }

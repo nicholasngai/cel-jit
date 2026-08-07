@@ -671,24 +671,24 @@ func astToGoSource(node *expr.Expr, checkedExpr *expr.CheckedExpr) (string, erro
 
 			switch extractOverloadID(checkedExpr.GetReferenceMap()[node.GetId()].GetOverloadId()) {
 			case overloads.IndexList:
-				switch indexType.Type() {
+				switch indexType {
 				case cel.IntType:
 					if containerType.Kind() != cel.ListKind {
-						return "", fmt.Errorf("type info for node %d is %v, not list", node.GetId(), containerType.Kind())
+						return fmt.Sprintf("runtime.Index(%s.DynValue(), %s.DynValue())", argsGo[0], argsGo[1]), nil
 					}
 					elemTypeInfo, err := celTypeInfo(containerType.Parameters()[0])
 					if err != nil {
 						return "", fmt.Errorf("list elem type %v to runtime types: %w", containerType.Parameters()[0], err)
 					}
-					return fmt.Sprintf(`runtime.IndexList[%s, %s](%s, %s.IntValue())`, elemTypeInfo.goType, elemTypeInfo.runtimeType, containerTypeInfo.converter(argsGo[0]), argsGo[1] ), nil
+					return fmt.Sprintf(`runtime.IndexList[%s, %s](%s, %s.IntValue())`, elemTypeInfo.goType, elemTypeInfo.runtimeType, containerTypeInfo.converter(argsGo[0]), argsGo[1]), nil
 				default:
 					return fmt.Sprintf("runtime.Index(%s.DynValue(), %s.DynValue())", argsGo[0], argsGo[1]), nil
 				}
 			case overloads.IndexMap:
-				switch indexType.Type() {
-				case cel.IntType:
-					if containerType.Kind() != cel.ListKind {
-						return "", fmt.Errorf("type info for node %d is %v, not list", node.GetId(), containerType.Kind())
+				switch indexType {
+				case cel.IntType, cel.UintType, cel.StringType:
+					if containerType.Kind() != cel.MapKind {
+						return fmt.Sprintf("runtime.Index(%s.DynValue(), %s.DynValue())", argsGo[0], argsGo[1]), nil
 					}
 					keyTypeInfo, err := celTypeInfo(containerType.Parameters()[0])
 					if err != nil {
@@ -708,38 +708,39 @@ func astToGoSource(node *expr.Expr, checkedExpr *expr.CheckedExpr) (string, erro
 		case operators.NotStrictlyFalse:
 			return fmt.Sprintf("runtime.NotStrictlyFalse(%s.BoolValue())", argsGo[0]), nil
 		case operators.In:
-			leftExprType, ok := checkedExpr.GetTypeMap()[exprKind.CallExpr.GetArgs()[0].GetId()]
+			searchExprType, ok := checkedExpr.GetTypeMap()[exprKind.CallExpr.GetArgs()[0].GetId()]
 			if !ok {
 				return "", fmt.Errorf("no type info for node %d", node.GetId())
 			}
-			leftType, err := cel.ExprTypeToType(leftExprType)
+			searchType, err := cel.ExprTypeToType(searchExprType)
 			if err != nil {
-				return "", fmt.Errorf("expr type %v to CEL type", leftExprType)
-			}
-			if leftType == cel.DynType {
-				return fmt.Sprintf("runtime.In(%s.DynValue(), %s.DynValue())", argsGo[0], argsGo[1]), nil
+				return "", fmt.Errorf("expr type %v to CEL type", searchExprType)
 			}
 
-			rightExprType, ok := checkedExpr.GetTypeMap()[exprKind.CallExpr.GetArgs()[1].GetId()]
+			containerExprType, ok := checkedExpr.GetTypeMap()[exprKind.CallExpr.GetArgs()[1].GetId()]
 			if !ok {
 				return "", fmt.Errorf("no type info for node %d", node.GetId())
 			}
-			rightType, err := cel.ExprTypeToType(rightExprType)
+			containerType, err := cel.ExprTypeToType(containerExprType)
 			if err != nil {
-				return "", fmt.Errorf("expr type %v to CEL type", rightExprType)
+				return "", fmt.Errorf("expr type %v to CEL type", containerExprType)
+			}
+			containerTypeInfo, err := celTypeInfo(containerType)
+			if err != nil {
+				return "", fmt.Errorf("container type %v to runtime types: %w", searchType.Parameters()[0], err)
 			}
 
 			switch extractOverloadID(checkedExpr.GetReferenceMap()[node.GetId()].GetOverloadId()) {
 			case overloads.InList:
-				if rightType.Kind() != cel.ListKind {
-					return "", fmt.Errorf("type info for node %d is %v, not list", node.GetId(), rightType.Kind())
-				}
-				if !rightType.Parameters()[0].IsExactType(leftType) {
+				if containerType.Kind() != cel.ListKind {
 					return fmt.Sprintf("runtime.In(%s.DynValue(), %s.DynValue())", argsGo[0], argsGo[1]), nil
 				}
-				leftTypeInfo, err := celTypeInfo(leftType)
+				if !containerType.Parameters()[0].IsExactType(searchType) {
+					return fmt.Sprintf("runtime.InList(%s, %s)", argsGo[0], argsGo[1]), nil
+				}
+				searchTypeInfo, err := celTypeInfo(searchType)
 				if err != nil {
-					return "", fmt.Errorf("left type %v to runtime types: %w", leftType, err)
+					return "", fmt.Errorf("search type %v to runtime types: %w", searchType, err)
 				}
 
 				return fmt.Sprintf(`(func() runtime.BoolValue {
@@ -760,31 +761,27 @@ func astToGoSource(node *expr.Expr, checkedExpr *expr.CheckedExpr) (string, erro
 				})()`,
 					argsGo[0],
 					argsGo[1],
-					leftTypeInfo.equaler("elem", "left.Val"),
+					searchTypeInfo.equaler("elem", "left.Val"),
 				), nil
 			case overloads.InMap:
-				if rightType.Kind() != cel.MapKind {
-					return "", fmt.Errorf("type info for node %d is %v, not map", node.GetId(), rightType.Kind())
-				}
-				if !rightType.Parameters()[0].IsExactType(leftType) {
+				switch searchType {
+				case cel.IntType, cel.UintType, cel.StringType:
+					if containerType.Kind() != cel.MapKind {
+						return fmt.Sprintf("runtime.In(%s.DynValue(), %s.DynValue())", argsGo[0], argsGo[1]), nil
+					}
+					keyTypeInfo, err := celTypeInfo(containerType.Parameters()[0])
+					if err != nil {
+						return "", fmt.Errorf("map key type %v to runtime types: %w", containerType.Parameters()[0], err)
+					}
+					valTypeInfo, err := celTypeInfo(containerType.Parameters()[1])
+					if err != nil {
+						return "", fmt.Errorf("map value type %v to runtime types: %w", containerType.Parameters()[1], err)
+					}
+
+					return fmt.Sprintf(`runtime.InMap[%s, %s, %s](%s, %s)`, keyTypeInfo.goType, valTypeInfo.goType, keyTypeInfo.runtimeType, keyTypeInfo.converter(argsGo[0]), containerTypeInfo.converter(argsGo[1])), nil
+				default:
 					return fmt.Sprintf("runtime.In(%s.DynValue(), %s.DynValue())", argsGo[0], argsGo[1]), nil
 				}
-
-				return fmt.Sprintf(`(func() runtime.BoolValue {
-					left := %s
-					right := %s
-					if left.Err != nil {
-						return runtime.BoolValue{Err: left.Err}
-					}
-					if right.Err != nil {
-						return runtime.BoolValue{Err: right.Err}
-					}
-					_, ok := right.Val[left.Val];
-					return runtime.BoolValue{Val: ok}
-				})()`,
-					argsGo[0],
-					argsGo[1],
-				), nil
 			default:
 				return fmt.Sprintf("runtime.In(%s.DynValue(), %s.DynValue())", argsGo[0], argsGo[1]), nil
 			}
