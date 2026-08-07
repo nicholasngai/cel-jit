@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -800,31 +801,6 @@ func GetDayOfWeek(a, b DynValue) DynValue {
 	return evalTime(a, b, time.Time.Weekday)
 }
 
-func evalTime[T ~int](a, b DynValue, eval func(a time.Time) T) DynValue {
-	if a.Err != nil {
-		return a
-	}
-	if b.Err != nil {
-		return b
-	}
-
-	switch a := a.Val.(type) {
-	case time.Time:
-		switch b := b.Val.(type) {
-		case string:
-			loc, err := time.LoadLocation(b)
-			if err != nil {
-				return DynValue{Err: fmt.Errorf("unknown location %q", b)}
-			}
-			return DynValue{Val: int64(eval(a.In(loc)))}
-		case nil:
-			return DynValue{Val: int64(eval(a.UTC()))}
-		}
-	}
-
-	return DynValue{Err: fmt.Errorf("incompatible types %T and %T", a.Val, b.Val)}
-}
-
 func GetHours(a, b DynValue) DynValue {
 	return evalTimeOrDuration(
 		a, b,
@@ -857,6 +833,31 @@ func GetMilliseconds(a, b DynValue) DynValue {
 	)
 }
 
+func evalTime[T ~int](a, b DynValue, eval func(a time.Time) T) DynValue {
+	if a.Err != nil {
+		return a
+	}
+	if b.Err != nil {
+		return b
+	}
+
+	switch a := a.Val.(type) {
+	case time.Time:
+		switch b := b.Val.(type) {
+		case string:
+			loc, err := loadLocation(b)
+			if err != nil {
+				return DynValue{Err: fmt.Errorf("unknown location %q", b)}
+			}
+			return DynValue{Val: int64(eval(a.In(loc)))}
+		case nil:
+			return DynValue{Val: int64(eval(a.UTC()))}
+		}
+	}
+
+	return DynValue{Err: fmt.Errorf("incompatible types %T and %T", a.Val, b.Val)}
+}
+
 func evalTimeOrDuration[T ~int, U ~int64](a, b DynValue, evalTime func(a time.Time) T, evalDuration func(a time.Duration) U) DynValue {
 	if a.Err != nil {
 		return a
@@ -869,7 +870,7 @@ func evalTimeOrDuration[T ~int, U ~int64](a, b DynValue, evalTime func(a time.Ti
 	case time.Time:
 		switch b := b.Val.(type) {
 		case string:
-			loc, err := time.LoadLocation(b)
+			loc, err := loadLocation(b)
 			if err != nil {
 				return DynValue{Err: fmt.Errorf("unknown location %q", b)}
 			}
@@ -885,6 +886,23 @@ func evalTimeOrDuration[T ~int, U ~int64](a, b DynValue, evalTime func(a time.Ti
 	}
 
 	return DynValue{Err: fmt.Errorf("incompatible types %T and %T", a.Val, b.Val)}
+}
+
+var locationCache sync.Map
+
+func loadLocation(locString string) (*time.Location, error) {
+	if locAny, ok := locationCache.Load(locString); ok {
+		return locAny.(*time.Location), nil
+	}
+
+	loc, err := time.LoadLocation(locString)
+	if err != nil {
+		return nil, err
+	}
+
+	locationCache.Store(locString, loc)
+
+	return loc, nil
 }
 
 //
