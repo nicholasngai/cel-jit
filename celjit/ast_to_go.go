@@ -708,7 +708,86 @@ func astToGoSource(node *expr.Expr, checkedExpr *expr.CheckedExpr) (string, erro
 		case operators.NotStrictlyFalse:
 			return fmt.Sprintf("runtime.NotStrictlyFalse(%s.BoolValue())", argsGo[0]), nil
 		case operators.In:
-			return fmt.Sprintf("runtime.In(%s.DynValue(), %s.DynValue())", argsGo[0], argsGo[1]), nil
+			leftExprType, ok := checkedExpr.GetTypeMap()[exprKind.CallExpr.GetArgs()[0].GetId()]
+			if !ok {
+				return "", fmt.Errorf("no type info for node %d", node.GetId())
+			}
+			leftType, err := cel.ExprTypeToType(leftExprType)
+			if err != nil {
+				return "", fmt.Errorf("expr type %v to CEL type", leftExprType)
+			}
+			if leftType == cel.DynType {
+				return fmt.Sprintf("runtime.In(%s.DynValue(), %s.DynValue())", argsGo[0], argsGo[1]), nil
+			}
+
+			rightExprType, ok := checkedExpr.GetTypeMap()[exprKind.CallExpr.GetArgs()[1].GetId()]
+			if !ok {
+				return "", fmt.Errorf("no type info for node %d", node.GetId())
+			}
+			rightType, err := cel.ExprTypeToType(rightExprType)
+			if err != nil {
+				return "", fmt.Errorf("expr type %v to CEL type", rightExprType)
+			}
+
+			switch extractOverloadID(checkedExpr.GetReferenceMap()[node.GetId()].GetOverloadId()) {
+			case overloads.InList:
+				if rightType.Kind() != cel.ListKind {
+					return "", fmt.Errorf("type info for node %d is %v, not list", node.GetId(), rightType.Kind())
+				}
+				if !rightType.Parameters()[0].IsExactType(leftType) {
+					return fmt.Sprintf("runtime.In(%s.DynValue(), %s.DynValue())", argsGo[0], argsGo[1]), nil
+				}
+				leftTypeInfo, err := celTypeInfo(leftType)
+				if err != nil {
+					return "", fmt.Errorf("left type %v to runtime types: %w", leftType, err)
+				}
+
+				return fmt.Sprintf(`(func() runtime.BoolValue {
+					left := %s
+					right := %s
+					if left.Err != nil {
+						return runtime.BoolValue{Err: left.Err}
+					}
+					if right.Err != nil {
+						return runtime.BoolValue{Err: right.Err}
+					}
+					for _, elem := range right.Val {
+						if %s {
+							return runtime.BoolValue{Val: true}
+						}
+					}
+					return runtime.BoolValue{Val: false}
+				})()`,
+					argsGo[0],
+					argsGo[1],
+					leftTypeInfo.equaler("elem", "left.Val"),
+				), nil
+			case overloads.InMap:
+				if rightType.Kind() != cel.MapKind {
+					return "", fmt.Errorf("type info for node %d is %v, not map", node.GetId(), rightType.Kind())
+				}
+				if !rightType.Parameters()[0].IsExactType(leftType) {
+					return fmt.Sprintf("runtime.In(%s.DynValue(), %s.DynValue())", argsGo[0], argsGo[1]), nil
+				}
+
+				return fmt.Sprintf(`(func() runtime.BoolValue {
+					left := %s
+					right := %s
+					if left.Err != nil {
+						return runtime.BoolValue{Err: left.Err}
+					}
+					if right.Err != nil {
+						return runtime.BoolValue{Err: right.Err}
+					}
+					_, ok := right.Val[left.Val];
+					return runtime.BoolValue{Val: ok}
+				})()`,
+					argsGo[0],
+					argsGo[1],
+				), nil
+			default:
+				return fmt.Sprintf("runtime.In(%s.DynValue(), %s.DynValue())", argsGo[0], argsGo[1]), nil
+			}
 		case "size":
 			return fmt.Sprintf("runtime.Size(%s.DynValue())", argsGo[0]), nil
 		case "matches":
