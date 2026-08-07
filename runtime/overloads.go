@@ -812,7 +812,7 @@ func NegateDouble(a DoubleValue) DoubleValue {
 	return DoubleValue{Val: -a.Val}
 }
 
-func IndexListInt[T any, Val ~struct{Val T; Err error}](a ListValue[T], b IntValue) Val {
+func IndexList[T any, Val ~struct{Val T; Err error}](a ListValue[T], b IntValue) Val {
 	if a.Err != nil {
 		return Val{Err: a.Err}
 	}
@@ -826,41 +826,4 @@ func IndexListInt[T any, Val ~struct{Val T; Err error}](a ListValue[T], b IntVal
 	}
 
 	return Val{Val: a.Val[b.Val]}
-}
-
-func IndexListUint[T any, Val ~struct{Val T; Err error}](a ListValue[T], b UintValue) Val {
-	if a.Err != nil {
-		return Val{Err: a.Err}
-	}
-	if b.Err != nil {
-		return Val{Err: b.Err}
-	}
-
-	// Check bounds.
-	if b.Val >= uint64(len(a.Val)) {
-		return Val{Err: fmt.Errorf("index %d out of range", b.Val)}
-	}
-
-	return Val{Val: a.Val[b.Val]}
-}
-
-func IndexListDouble[T any, Val ~struct{Val T; Err error}](a ListValue[T], b DoubleValue) Val {
-	if a.Err != nil {
-		return Val{Err: a.Err}
-	}
-	if b.Err != nil {
-		return Val{Err: b.Err}
-	}
-
-	bInt := int(b.Val)
-	if float64(bInt) != b.Val {
-		return Val{Err: fmt.Errorf("cannot index list with value %f", b.Val)}
-	}
-
-	// Check bounds.
-	if bInt >= len(a.Val) {
-		return Val{Err: fmt.Errorf("index %d out of range", bInt)}
-	}
-
-	return Val{Val: a.Val[bInt]}
 }

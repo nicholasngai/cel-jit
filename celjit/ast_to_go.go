@@ -649,26 +649,6 @@ func astToGoSource(node *expr.Expr, checkedExpr *expr.CheckedExpr) (string, erro
 		case operators.Index:
 			switch extractOverloadID(checkedExpr.GetReferenceMap()[node.GetId()].GetOverloadId()) {
 			case overloads.IndexList:
-				listExprType, ok := checkedExpr.GetTypeMap()[exprKind.CallExpr.GetArgs()[0].GetId()]
-				if !ok {
-					return "", fmt.Errorf("no type info for node %d", node.GetId())
-				}
-				listType, err := cel.ExprTypeToType(listExprType)
-				if err != nil {
-					return "", fmt.Errorf("expr type %v to CEL type", listExprType)
-				}
-				listTypeInfo, err := celTypeInfo(listType)
-				if err != nil {
-					return "", fmt.Errorf("list type %v to runtime types: %w", listType.Parameters()[0], err)
-				}
-				if listType.Kind() != cel.ListKind {
-					return "", fmt.Errorf("type info for node %d is %v, not list", node.GetId(), listType.Kind())
-				}
-				elemTypeInfo, err := celTypeInfo(listType.Parameters()[0])
-				if err != nil {
-					return "", fmt.Errorf("list elem type %v to runtime types: %w", listType.Parameters()[0], err)
-				}
-
 				indexExprType, ok := checkedExpr.GetTypeMap()[exprKind.CallExpr.GetArgs()[1].GetId()]
 				if !ok {
 					return "", fmt.Errorf("no type info for node %d", node.GetId())
@@ -678,12 +658,32 @@ func astToGoSource(node *expr.Expr, checkedExpr *expr.CheckedExpr) (string, erro
 					return "", fmt.Errorf("expr type %v to CEL type", indexExprType)
 				}
 
-				switch indexType {
-				case cel.IntType:
-					return fmt.Sprintf(`runtime.IndexListInt[%s, %s](%s, %s.IntValue())`, elemTypeInfo.goType, elemTypeInfo.runtimeType, listTypeInfo.converter(argsGo[0]), argsGo[1] ), nil
+				if indexType == cel.IntType {
+					listExprType, ok := checkedExpr.GetTypeMap()[exprKind.CallExpr.GetArgs()[0].GetId()]
+					if !ok {
+						return "", fmt.Errorf("no type info for node %d", node.GetId())
+					}
+					listType, err := cel.ExprTypeToType(listExprType)
+					if err != nil {
+						return "", fmt.Errorf("expr type %v to CEL type", listExprType)
+					}
+					listTypeInfo, err := celTypeInfo(listType)
+					if err != nil {
+						return "", fmt.Errorf("list type %v to runtime types: %w", listType.Parameters()[0], err)
+					}
+					if listType.Kind() != cel.ListKind {
+						return "", fmt.Errorf("type info for node %d is %v, not list", node.GetId(), listType.Kind())
+					}
+					elemTypeInfo, err := celTypeInfo(listType.Parameters()[0])
+					if err != nil {
+						return "", fmt.Errorf("list elem type %v to runtime types: %w", listType.Parameters()[0], err)
+					}
+
+					return fmt.Sprintf(`runtime.IndexList[%s, %s](%s, %s.IntValue())`, elemTypeInfo.goType, elemTypeInfo.runtimeType, listTypeInfo.converter(argsGo[0]), argsGo[1] ), nil
+				} else {
+					return fmt.Sprintf("runtime.Index(%s.DynValue(), %s.DynValue())", argsGo[0], argsGo[1]), nil
 				}
 			}
-			return fmt.Sprintf("runtime.Index(%s.DynValue(), %s.DynValue())", argsGo[0], argsGo[1]), nil
 		case operators.NotStrictlyFalse:
 			return fmt.Sprintf("runtime.NotStrictlyFalse(%s.BoolValue())", argsGo[0]), nil
 		case operators.In:
