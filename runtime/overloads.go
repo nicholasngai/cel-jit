@@ -827,3 +827,19 @@ func IndexList[T any, Val ~struct{Val T; Err error}](a ListValue[T], b IntValue)
 
 	return Val{Val: a.Val[b.Val]}
 }
+
+func IndexMap[K comparable, V any, KVal ~struct{Val K; Err error}, Val ~struct{Val V; Err error}](a MapValue[K, V], b KVal) Val {
+	bStruct := (struct{Val K; Err error})(b)
+	if a.Err != nil {
+		return Val{Err: a.Err}
+	}
+	if bStruct.Err != nil {
+		return Val{Err: bStruct.Err}
+	}
+
+	elem, ok := a.Val[bStruct.Val]
+	if !ok {
+		return Val{Err: fmt.Errorf("no such key %v", bStruct.Val)}
+	}
+	return Val{Val: elem}
+}
