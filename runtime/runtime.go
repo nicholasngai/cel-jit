@@ -621,24 +621,21 @@ func Index(a, b DynValue) DynValue {
 			}
 		}
 
-		// We didn't find the element. See if we need to do a scan for numeric
-		// comparison. Only int and uints can be keys and numerically compared.
-		switch b.Val.(type) {
+		// We didn't find the element. If this is an int, we need to also check
+		// the uint, and vice-versa.
+		switch b := b.Val.(type) {
 		case int64:
-		case uint64:
-		default:
-			return DynValue{Err: fmt.Errorf("no such key %v", bVal)}
-		}
-
-		// If this is a key type that supports numeric equality, then we need to
-		// iterate through the keys of b.
-		for aMapIter := aVal.MapRange(); aMapIter.Next(); {
-			if !Eq(b.Val, aMapIter.Key().Interface()) {
-				continue
+			if b > 0 && reflect.TypeFor[uint64]().AssignableTo(aType.Key()) {
+				if elemVal := aVal.MapIndex(reflect.ValueOf(uint64(b))); elemVal.IsValid() {
+					return DynValue{Val: elemVal.Interface()}
+				}
 			}
-
-			// Found the element.
-			return DynValue{Val: aMapIter.Value().Interface()}
+		case uint64:
+			if b <= math.MaxInt64 && reflect.TypeFor[int64]().AssignableTo(aType.Key()) {
+				if elemVal := aVal.MapIndex(reflect.ValueOf(int64(b))); elemVal.IsValid() {
+					return DynValue{Val: elemVal.Interface()}
+				}
+			}
 		}
 
 		return DynValue{Err: fmt.Errorf("no such key %v", bVal)}
@@ -678,24 +675,21 @@ func In(a, b DynValue) DynValue {
 			}
 		}
 
-		// We didn't find the element. See if we need to do a scan for numeric
-		// comparison. Only int and uints can be keys and numerically compared.
-		switch a.Val.(type) {
+		// We didn't find the element. If this is an int, we need to also check
+		// the uint, and vice-versa.
+		switch a := a.Val.(type) {
 		case int64:
-		case uint64:
-		default:
-			return DynValue{Val: false}
-		}
-
-		// If this is a key type that supports numeric equality, then we need to
-		// iterate through the keys of b.
-		for bMapIter := bVal.MapRange(); bMapIter.Next(); {
-			if !Eq(a.Val, bMapIter.Key().Interface()) {
-				continue
+			if a > 0 && reflect.TypeFor[uint64]().AssignableTo(bType.Key()) {
+				if bVal.MapIndex(reflect.ValueOf(uint64(a))).IsValid() {
+					return DynValue{Val: true}
+				}
 			}
-
-			// Found the element.
-			return DynValue{Val: true}
+		case uint64:
+			if a <= math.MaxInt64 && reflect.TypeFor[int64]().AssignableTo(bType.Key()) {
+				if bVal.MapIndex(reflect.ValueOf(int64(a))).IsValid() {
+					return DynValue{Val: true}
+				}
+			}
 		}
 
 		return DynValue{Val: false}
