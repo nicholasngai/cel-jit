@@ -155,7 +155,22 @@ func celTypeInfo(t *cel.Type) (runtimeTypeInfo, error) {
 // Compile returns a JIT-compiled version of the given CEL expression. For each
 // parameter, [Config.Parameters], the returned function will be of type
 //
-//	func(a any, b any[, ...]) (any, error)
+//	func(a T, b U[, ...]) (R, error)
+//
+// Parameter types and the return type are chosen based on the type paraemters.
+// The mapping of CEL parameter to Go type is as follows:
+//
+// - int -> int64
+// - uint -> uint64
+// - double -> float64
+// - bool -> bool
+// - string -> string
+// - bytes -> []byte
+// - list(T) -> []T
+// - map(K, V) -> map[K]V
+// - timestamp -> [time.Time]
+// - duration -> [time.Duration]
+// - dyn -> any
 func Compile(config Config) ([]any, error) {
 	// Make a temporary compile directory.
 	tempDir, err := os.MkdirTemp("", "cel-jit-compiled-*")
