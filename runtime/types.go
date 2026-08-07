@@ -6,11 +6,14 @@ import (
 	"time"
 )
 
-// DynValue represents a dynamically typed runtime value.
-type DynValue struct {
-	Val any
+// Value represents a value.
+type Value[T any] struct {
+	Val T
 	Err error
 }
+
+// DynValue represents a dynamically typed runtime value.
+type DynValue Value[any]
 
 func (v DynValue) DynValue() DynValue {
 	return v
@@ -265,10 +268,7 @@ func toMap(v reflect.Value, keyType reflect.Type, valueType reflect.Type) (refle
 }
 
 // IntValue represents a statically typed int value.
-type IntValue struct {
-	Val int64
-	Err error
-}
+type IntValue Value[int64]
 
 func (v IntValue) DynValue() DynValue {
 	if v.Err != nil {
@@ -282,10 +282,7 @@ func (v IntValue) IntValue() IntValue {
 }
 
 // UintValue represents a statically typed uint value.
-type UintValue struct {
-	Val uint64
-	Err error
-}
+type UintValue Value[uint64]
 
 func (v UintValue) DynValue() DynValue {
 	if v.Err != nil {
@@ -299,10 +296,7 @@ func (v UintValue) UintValue() UintValue {
 }
 
 // DoubleValue represents a statically typed double value.
-type DoubleValue struct {
-	Val float64
-	Err error
-}
+type DoubleValue Value[float64]
 
 func (v DoubleValue) DynValue() DynValue {
 	if v.Err != nil {
@@ -316,10 +310,7 @@ func (v DoubleValue) DoubleValue() DoubleValue {
 }
 
 // BoolValue represents a statically typed bool value.
-type BoolValue struct {
-	Val bool
-	Err error
-}
+type BoolValue Value[bool]
 
 func (v BoolValue) DynValue() DynValue {
 	if v.Err != nil {
@@ -333,10 +324,7 @@ func (v BoolValue) BoolValue() BoolValue {
 }
 
 // StringValue represents a statically typed string value.
-type StringValue struct {
-	Val string
-	Err error
-}
+type StringValue Value[string]
 
 func (v StringValue) DynValue() DynValue {
 	if v.Err != nil {
@@ -350,10 +338,7 @@ func (v StringValue) StringValue() StringValue {
 }
 
 // BytesValue represents a statically typed bytes value.
-type BytesValue struct {
-	Val []byte
-	Err error
-}
+type BytesValue Value[[]byte]
 
 func (v BytesValue) DynValue() DynValue {
 	if v.Err != nil {
@@ -367,10 +352,7 @@ func (v BytesValue) BytesValue() BytesValue {
 }
 
 // TimestampValue represents a statically typed timestamp value.
-type TimestampValue struct {
-	Val time.Time
-	Err error
-}
+type TimestampValue Value[time.Time]
 
 func (v TimestampValue) DynValue() DynValue {
 	if v.Err != nil {
@@ -384,10 +366,7 @@ func (v TimestampValue) TimestampValue() TimestampValue {
 }
 
 // DurationValue represents a statically typed duration value.
-type DurationValue struct {
-	Val time.Duration
-	Err error
-}
+type DurationValue Value[time.Duration]
 
 func (v DurationValue) DynValue() DynValue {
 	if v.Err != nil {
@@ -401,10 +380,7 @@ func (v DurationValue) DurationValue() DurationValue {
 }
 
 // NullValue represents a statically typed null value.
-type NullValue struct {
-	Val struct{}
-	Err error
-}
+type NullValue Value[struct{}]
 
 func (v NullValue) DynValue() DynValue {
 	if v.Err != nil {
@@ -418,10 +394,7 @@ func (v NullValue) NullValue() NullValue {
 }
 
 // ListValue represents a statically typed list value.
-type ListValue[T any] struct {
-	Val []T
-	Err error
-}
+type ListValue[T any] Value[[]T]
 
 func (v ListValue[T]) DynValue() DynValue {
 	if v.Err != nil {
@@ -431,10 +404,7 @@ func (v ListValue[T]) DynValue() DynValue {
 }
 
 // ListValue represents a statically typed map value.
-type MapValue[K comparable, V any] struct {
-	Val map[K]V
-	Err error
-}
+type MapValue[K comparable, V any] Value[map[K]V]
 
 func (v MapValue[K, V]) DynValue() DynValue {
 	if v.Err != nil {

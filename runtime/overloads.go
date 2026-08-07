@@ -812,55 +812,55 @@ func NegateDouble(a DoubleValue) DoubleValue {
 	return DoubleValue{Val: -a.Val}
 }
 
-func IndexListInt[T any, Val any](a ListValue[T], b IntValue, makeVal func(T) Val, makeErr func(error) Val) Val {
+func IndexListInt[T any, Val ~struct{Val T; Err error}](a ListValue[T], b IntValue) Val {
 	if a.Err != nil {
-		return makeErr(a.Err)
+		return Val{Err: a.Err}
 	}
 	if b.Err != nil {
-		return makeErr(b.Err)
+		return Val{Err: b.Err}
 	}
 
 	// Check bounds.
 	if b.Val < 0 || b.Val >= int64(len(a.Val)) {
-		return makeErr(fmt.Errorf("index %d out of range", b.Val))
+		return Val{Err: fmt.Errorf("index %d out of range", b.Val)}
 	}
 
-	return makeVal(a.Val[b.Val])
+	return Val{Val: a.Val[b.Val]}
 }
 
-func IndexListUint[T any, Val any](a ListValue[T], b UintValue, makeVal func(T) Val, makeErr func(error) Val) Val {
+func IndexListUint[T any, Val ~struct{Val T; Err error}](a ListValue[T], b UintValue) Val {
 	if a.Err != nil {
-		return makeErr(a.Err)
+		return Val{Err: a.Err}
 	}
 	if b.Err != nil {
-		return makeErr(b.Err)
+		return Val{Err: b.Err}
 	}
 
 	// Check bounds.
 	if b.Val >= uint64(len(a.Val)) {
-		return makeErr(fmt.Errorf("index %d out of range", b.Val))
+		return Val{Err: fmt.Errorf("index %d out of range", b.Val)}
 	}
 
-	return makeVal(a.Val[b.Val])
+	return Val{Val: a.Val[b.Val]}
 }
 
-func IndexListDouble[T any, Val any](a ListValue[T], b DoubleValue, makeVal func(T) Val, makeErr func(error) Val) Val {
+func IndexListDouble[T any, Val ~struct{Val T; Err error}](a ListValue[T], b DoubleValue) Val {
 	if a.Err != nil {
-		return makeErr(a.Err)
+		return Val{Err: a.Err}
 	}
 	if b.Err != nil {
-		return makeErr(b.Err)
+		return Val{Err: b.Err}
 	}
 
 	bInt := int(b.Val)
 	if float64(bInt) != b.Val {
-		return makeErr(fmt.Errorf("cannot index list with value %f", b.Val))
+		return Val{Err: fmt.Errorf("cannot index list with value %f", b.Val)}
 	}
 
 	// Check bounds.
 	if bInt >= len(a.Val) {
-		return makeErr(fmt.Errorf("index %d out of range", bInt))
+		return Val{Err: fmt.Errorf("index %d out of range", bInt)}
 	}
 
-	return makeVal(a.Val[bInt])
+	return Val{Val: a.Val[bInt]}
 }

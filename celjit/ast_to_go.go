@@ -664,7 +664,7 @@ func astToGoSource(node *expr.Expr, checkedExpr *expr.CheckedExpr) (string, erro
 				if listType.Kind() != cel.ListKind {
 					return "", fmt.Errorf("type info for node %d is %v, not list", node.GetId(), listType.Kind())
 				}
-				listElemTypeInfo, err := celTypeInfo(listType.Parameters()[0])
+				elemTypeInfo, err := celTypeInfo(listType.Parameters()[0])
 				if err != nil {
 					return "", fmt.Errorf("list elem type %v to runtime types: %w", listType.Parameters()[0], err)
 				}
@@ -680,14 +680,7 @@ func astToGoSource(node *expr.Expr, checkedExpr *expr.CheckedExpr) (string, erro
 
 				switch indexType {
 				case cel.IntType:
-					return fmt.Sprintf(`runtime.IndexListInt(
-						%s,
-						%s.IntValue(),
-						func(elem %s) %s { return %[4]s{Val: elem} },
-						func(err error) %[4]s { return %[4]s{Err: err} },
-					)`,
-						listTypeInfo.converter(argsGo[0]), argsGo[1], listElemTypeInfo.goType, listElemTypeInfo.runtimeType,
-					), nil
+					return fmt.Sprintf(`runtime.IndexListInt[%s, %s](%s, %s.IntValue())`, elemTypeInfo.goType, elemTypeInfo.runtimeType, listTypeInfo.converter(argsGo[0]), argsGo[1] ), nil
 				}
 			}
 			return fmt.Sprintf("runtime.Index(%s.DynValue(), %s.DynValue())", argsGo[0], argsGo[1]), nil
