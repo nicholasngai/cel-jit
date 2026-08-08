@@ -7,6 +7,27 @@ import (
 	"math"
 )
 
+func SelectMap[Val ~struct{Val V; Err error}, V any](a MapValue[string, V], fieldName string) Val {
+	if a.Err != nil {
+		return Val{Err: a.Err}
+	}
+
+	elem, ok := a.Val[fieldName]
+	if !ok {
+		return Val{Err: fmt.Errorf("no such key %v", fieldName)}
+	}
+	return Val{Val: elem}
+}
+
+func HasMap[V any](a MapValue[string, V], fieldName string) BoolValue {
+	if a.Err != nil {
+		return BoolValue{Err: a.Err}
+	}
+
+	_, ok := a.Val[fieldName]
+	return BoolValue{Val: ok}
+}
+
 func LessInt64(a, b IntValue) BoolValue {
 	if a.Err != nil {
 		return BoolValue{Err: a.Err}
@@ -813,7 +834,7 @@ func NegateDouble(a DoubleValue) DoubleValue {
 	return DoubleValue{Val: -a.Val}
 }
 
-func IndexList[T any, Val ~struct{Val T; Err error}](a ListValue[T], b IntValue) Val {
+func IndexList[Val ~struct{Val T; Err error}, T any](a ListValue[T], b IntValue) Val {
 	if a.Err != nil {
 		return Val{Err: a.Err}
 	}
@@ -829,7 +850,7 @@ func IndexList[T any, Val ~struct{Val T; Err error}](a ListValue[T], b IntValue)
 	return Val{Val: a.Val[b.Val]}
 }
 
-func IndexMap[K comparable, V any, KVal ~struct{Val K; Err error}, Val ~struct{Val V; Err error}](a MapValue[K, V], b KVal) Val {
+func IndexMap[Val ~struct{Val V; Err error}, K comparable, V any, KVal ~struct{Val K; Err error}](a MapValue[K, V], b KVal) Val {
 	bStruct := (struct{Val K; Err error})(b)
 	if a.Err != nil {
 		return Val{Err: a.Err}

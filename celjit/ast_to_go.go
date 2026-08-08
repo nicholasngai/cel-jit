@@ -157,10 +157,47 @@ func astToGoSource(node *expr.Expr, checkedExpr *expr.CheckedExpr) (string, erro
 		if err != nil {
 			return "", fmt.Errorf("operand: %w", err)
 		}
-		if exprKind.SelectExpr.TestOnly {
-			return fmt.Sprintf("runtime.Has(%s.DynValue(), %q)", operandGo, exprKind.SelectExpr.GetField()), nil
+
+		operandExprType, ok := checkedExpr.GetTypeMap()[exprKind.SelectExpr.GetOperand().GetId()]
+		if !ok {
+			return "", fmt.Errorf("no type info for node %d", exprKind.SelectExpr.GetOperand().GetId())
 		}
-		return fmt.Sprintf("runtime.Select(%s.DynValue(), %q)", operandGo, exprKind.SelectExpr.GetField()), nil
+		operandType, err := cel.ExprTypeToType(operandExprType)
+		if err != nil {
+			return "", fmt.Errorf("expr type %v to CEL type", operandExprType)
+		}
+
+		if operandType.Kind() != cel.MapKind {
+			if exprKind.SelectExpr.TestOnly {
+				return fmt.Sprintf("runtime.Has(%s.DynValue(), %q)", operandGo, exprKind.SelectExpr.GetField()), nil
+			} else {
+				return fmt.Sprintf("runtime.Select(%s.DynValue(), %q)", operandGo, exprKind.SelectExpr.GetField()), nil
+			}
+		}
+
+		operandTypeInfo, err := celTypeInfo(operandType)
+		if err != nil {
+			return "", fmt.Errorf("operand type %v to runtime types: %w", operandType, err)
+		}
+
+		switch operandType.Parameters()[0] {
+		case cel.StringType:
+			if exprKind.SelectExpr.TestOnly {
+				return fmt.Sprintf("runtime.HasMap(%s, %q)", operandGo, exprKind.SelectExpr.GetField()), nil
+			} else {
+				valTypeInfo, err := celTypeInfo(operandType.Parameters()[1])
+				if err != nil {
+					return "", fmt.Errorf("map value type %v to runtime types: %w", operandType.Parameters()[1], err)
+				}
+				return fmt.Sprintf("runtime.SelectMap[%s](%s, %q)", valTypeInfo.runtimeType, operandTypeInfo.converter(operandGo), exprKind.SelectExpr.GetField()), nil
+			}
+		default:
+			if exprKind.SelectExpr.TestOnly {
+				return fmt.Sprintf("runtime.Has(%s.DynValue(), %q)", operandGo, exprKind.SelectExpr.GetField()), nil
+			} else {
+				return fmt.Sprintf("runtime.Select(%s.DynValue(), %q)", operandGo, exprKind.SelectExpr.GetField()), nil
+			}
+		}
 	case *expr.Expr_ComprehensionExpr:
 		rangeGo, err := astToGoSource(exprKind.ComprehensionExpr.GetIterRange(), checkedExpr)
 		if err != nil {
@@ -680,7 +717,7 @@ func astToGoSource(node *expr.Expr, checkedExpr *expr.CheckedExpr) (string, erro
 					if err != nil {
 						return "", fmt.Errorf("list elem type %v to runtime types: %w", containerType.Parameters()[0], err)
 					}
-					return fmt.Sprintf(`runtime.IndexList[%s, %s](%s, %s.IntValue())`, elemTypeInfo.goType, elemTypeInfo.runtimeType, containerTypeInfo.converter(argsGo[0]), argsGo[1]), nil
+					return fmt.Sprintf(`runtime.IndexList[%s](%s, %s.IntValue())`, elemTypeInfo.runtimeType, containerTypeInfo.converter(argsGo[0]), argsGo[1]), nil
 				default:
 					return fmt.Sprintf("runtime.Index(%s.DynValue(), %s.DynValue())", argsGo[0], argsGo[1]), nil
 				}
@@ -698,7 +735,7 @@ func astToGoSource(node *expr.Expr, checkedExpr *expr.CheckedExpr) (string, erro
 					if err != nil {
 						return "", fmt.Errorf("map value type %v to runtime types: %w", containerType.Parameters()[1], err)
 					}
-					return fmt.Sprintf(`runtime.IndexMap[%s, %s, %s, %s](%s, %s)`, keyTypeInfo.goType, valTypeInfo.goType, keyTypeInfo.runtimeType, valTypeInfo.runtimeType, containerTypeInfo.converter(argsGo[0]), keyTypeInfo.converter(argsGo[1])), nil
+					return fmt.Sprintf(`runtime.IndexMap[%s](%s, %s)`, valTypeInfo.runtimeType, containerTypeInfo.converter(argsGo[0]), keyTypeInfo.converter(argsGo[1])), nil
 				default:
 					return fmt.Sprintf("runtime.Index(%s.DynValue(), %s.DynValue())", argsGo[0], argsGo[1]), nil
 				}
