@@ -381,6 +381,10 @@ func BenchmarkJIT(b *testing.B) {
 				for b.Loop() {
 					_, _ = f()
 				}
+			case func() ([][][]any, error):
+				for b.Loop() {
+					_, _ = f()
+				}
 			case func() (map[string]int64, error):
 				for b.Loop() {
 					_, _ = f()
