@@ -1,13 +1,16 @@
 package celjit
 
 import (
+	"crypto/sha256"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"plugin"
 	"runtime/debug"
 	"strings"
+	"sync"
 
 	"github.com/google/cel-go/cel"
 )
@@ -152,6 +155,14 @@ func celTypeInfo(t *cel.Type) (runtimeTypeInfo, error) {
 	}
 }
 
+// Plugin loading in Go takes up memory for the lifetime of the process anyway,
+// so we might as well keep a hash of program file -> loaded plugin. This allows
+// duplicate programs to still compile correctly---otherwise, if -trimpath is
+// enabled, the plugin/unnamed-%x will be the same per
+// https://cs.opensource.google/go/go/+/refs/tags/go1.26.5:src/cmd/go/internal/work/gc.go;l=559;bpv=1;bpt=0
+// and plugin loading will fail with "plugin already loaded" error.
+var pluginsByHash sync.Map // [sha256.Size]byte -> func() (*plugin.Plugin, error)
+
 // Compile returns a JIT-compiled version of the given CEL expression. For each
 // parameter, [Config.Parameters], the returned function will be of type
 //
@@ -172,6 +183,26 @@ func celTypeInfo(t *cel.Type) (runtimeTypeInfo, error) {
 // - duration -> [time.Duration]
 // - dyn -> any
 func Compile(config Config) ([]any, error) {
+	// Compile plugin.
+	plug, err := compilePlugin(config)
+	if err != nil {
+		return nil, err
+	}
+
+	// Return functions.
+	funcs := make([]any, 0, len(config.Exprs))
+	for i := range config.Exprs {
+		f, err := plug.Lookup(fmt.Sprintf("Program%d", i))
+		if err != nil {
+			return nil, fmt.Errorf("lookup program: %w", err)
+		}
+		funcs = append(funcs, f)
+	}
+
+	return funcs, nil
+}
+
+func compilePlugin(config Config) (*plugin.Plugin, error) {
 	// Make a temporary compile directory.
 	tempDir, err := os.MkdirTemp("", "cel-jit-compiled-*")
 	if err != nil {
@@ -200,13 +231,17 @@ replace github.com/nicholasngai/cel-jit/runtime-source => %s
 		return nil, err
 	}
 
-	// Write program header.
+	// Write file out.
+	programHasher := sha256.New()
 	programFile, err := os.Create(filepath.Join(tempDir, "program.go"))
 	if err != nil {
 		return nil, fmt.Errorf("create program.go: %w", err)
 	}
 	defer programFile.Close()
-	if _, err := programFile.WriteString(
+	program := io.MultiWriter(programHasher, programFile)
+
+	// Write header.
+	if _, err := fmt.Fprint(program,
 		`package main
 
 import (
@@ -293,7 +328,7 @@ var (
 		}
 
 		// Write the program.
-		if _, err := fmt.Fprintf(programFile,
+		if _, err := fmt.Fprintf(program,
 			`
 func Program%d(%s) (%s, error) {
 	val := program%[1]d(%[4]s)
@@ -326,45 +361,48 @@ func program%[1]d(%[5]s) %s {
 		return nil, fmt.Errorf("close program.go: %w", err)
 	}
 
-	// Compile it. Use the same build args as the currently running binary, other than -buildmode.
-	goArgs := []string{
-		"build",
-		"-C", tempDir,
-		"-buildmode=plugin",
-	}
-	if buildInfo, ok := debug.ReadBuildInfo(); ok {
-		for _, setting := range buildInfo.Settings {
-			if strings.HasPrefix(setting.Key, "-") && setting.Key != "-buildmode" {
-				goArgs = append(goArgs, fmt.Sprintf("%s=%s", setting.Key, setting.Value))
+	programHashSlice := programHasher.Sum(nil)
+	var programHash [sha256.Size]byte
+	copy(programHash[:], programHashSlice)
+
+	// Make sync.OnceValues and put it in the cache. We use LoadOrStore to
+	// dedupe with anyone else that might be compiling this hash at the same
+	// time.
+	pluginFunc := sync.OnceValues(func() (*plugin.Plugin, error) {
+		// Compile it. Use the same build args as the currently running binary, other than -buildmode.
+		goArgs := []string{
+			"build",
+			"-C", tempDir,
+			"-buildmode=plugin",
+		}
+		if buildInfo, ok := debug.ReadBuildInfo(); ok {
+			for _, setting := range buildInfo.Settings {
+				if strings.HasPrefix(setting.Key, "-") && setting.Key != "-buildmode" {
+					goArgs = append(goArgs, fmt.Sprintf("%s=%s", setting.Key, setting.Value))
+				}
 			}
 		}
-	}
-	goArgs = append(goArgs,
-		"-o", "program.so",
-		"program.go",
-	)
-	cmd := exec.Command("go", goArgs...)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return nil, fmt.Errorf("go build program.go: %w\n\n%s", err, string(output))
-	}
-
-	// Load program into memory.
-	plug, err := plugin.Open(filepath.Join(tempDir, "program.so"))
-	if err != nil {
-		return nil, fmt.Errorf("load program.so: %w", err)
-	}
-
-	// Return functions.
-	funcs := make([]any, 0, len(config.Exprs))
-	for i := range config.Exprs {
-		f, err := plug.Lookup(fmt.Sprintf("Program%d", i))
-		if err != nil {
-			return nil, fmt.Errorf("lookup program: %w", err)
+		goArgs = append(goArgs,
+			"-o", "program.so",
+			"program.go",
+		)
+		cmd := exec.Command("go", goArgs...)
+		if output, err := cmd.CombinedOutput(); err != nil {
+			return nil, fmt.Errorf("go build program.go: %w\n\n%s", err, string(output))
 		}
-		funcs = append(funcs, f)
-	}
 
-	return funcs, nil
+		// Load program into memory.
+		plug, err := plugin.Open(filepath.Join(tempDir, "program.so"))
+		if err != nil {
+			return nil, fmt.Errorf("load program.so: %w", err)
+		}
+
+		return plug, nil
+	})
+	pluginFuncAny, _ := pluginsByHash.LoadOrStore(programHash, pluginFunc)
+	pluginFunc = pluginFuncAny.(func() (*plugin.Plugin, error))
+
+	return pluginFunc()
 }
 
 func repeat[T any](format string, vals []T, mapper func(T) []any) string {
