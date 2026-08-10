@@ -13,6 +13,7 @@ import (
 	"sync"
 
 	"github.com/google/cel-go/cel"
+	"github.com/google/cel-go/ext"
 )
 
 // CompileConfig is the config for a [Compile] call.
@@ -262,11 +263,31 @@ var (
 
 	// Append each expression to program file.
 	for i, exprConfig := range config.Exprs {
-		envOptions := make([]cel.EnvOption, 0, len(exprConfig.Parameters)+2)
+		envOptions := make([]cel.EnvOption, 0, len(e.config.Functions)+len(exprConfig.Parameters)+3)
 		envOptions = append(envOptions,
 			cel.EagerlyValidateDeclarations(true),
 			cel.ExtendedValidations(),
 		)
+
+		// Make types.
+		typesAny := make([]any, 0, len(e.config.Types))
+		for _, t := range e.config.Types {
+			typesAny = append(typesAny, t)
+		}
+		envOptions = append(envOptions, ext.NativeTypes(typesAny...))
+
+		// Make functions.
+		for funcID, funcConfig := range e.config.Functions {
+			funcOpts := make([]cel.FunctionOpt, 0, len(funcConfig.Overloads))
+			for overloadID, overloadConfig := range funcConfig.Overloads {
+				if overloadConfig.IsMemberOverload {
+					funcOpts = append(funcOpts, cel.MemberOverload(overloadID, overloadConfig.ParameterTypes, overloadConfig.ReturnType))
+				} else {
+					funcOpts = append(funcOpts, cel.Overload(overloadID, overloadConfig.ParameterTypes, overloadConfig.ReturnType))
+				}
+			}
+			envOptions = append(envOptions, cel.Function(funcID, funcOpts...))
+		}
 
 		// Make variables.
 		for _, param := range exprConfig.Parameters {

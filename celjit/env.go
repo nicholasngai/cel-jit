@@ -32,6 +32,10 @@ type Function struct {
 // FunctionOverload is a single overload of a [Function]. An overload contains a
 // set of type parameters, a return type, and an implementation.
 type FunctionOverload struct {
+	// True if this is a member overload/method. False if this is a global
+	// function.
+	IsMemberOverload bool
+
 	// The parameter types to the function. If this is a member overload, the
 	// first parameter is the receiver.
 	ParameterTypes []*cel.Type
