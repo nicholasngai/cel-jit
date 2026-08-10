@@ -15,8 +15,8 @@ import (
 	"github.com/google/cel-go/cel"
 )
 
-// Config is the config for a [Compile] call.
-type Config struct {
+// CompileConfig is the config for a [Compile] call.
+type CompileConfig struct {
 	Exprs []ExprConfig
 }
 
@@ -164,7 +164,7 @@ func celTypeInfo(t *cel.Type) (runtimeTypeInfo, error) {
 var pluginsByHash sync.Map // [sha256.Size]byte -> func() (*plugin.Plugin, error)
 
 // Compile returns a JIT-compiled version of the given CEL expression. For each
-// parameter, [Config.Parameters], the returned function will be of type
+// parameter, [CompileConfig.Parameters], the returned function will be of type
 //
 //	func(a T, b U[, ...]) (R, error)
 //
@@ -182,9 +182,9 @@ var pluginsByHash sync.Map // [sha256.Size]byte -> func() (*plugin.Plugin, error
 // - timestamp -> [time.Time]
 // - duration -> [time.Duration]
 // - dyn -> any
-func Compile(config Config) ([]any, error) {
+func (e *Env) Compile(config CompileConfig) ([]any, error) {
 	// Compile plugin.
-	plug, err := compilePlugin(config)
+	plug, err := e.compilePlugin(config)
 	if err != nil {
 		return nil, err
 	}
@@ -202,19 +202,13 @@ func Compile(config Config) ([]any, error) {
 	return funcs, nil
 }
 
-func compilePlugin(config Config) (*plugin.Plugin, error) {
+func (e *Env) compilePlugin(config CompileConfig) (*plugin.Plugin, error) {
 	// Make a temporary compile directory.
 	tempDir, err := os.MkdirTemp("", "cel-jit-compiled-*")
 	if err != nil {
 		return nil, fmt.Errorf("mkdir temp: %w", err)
 	}
 	defer os.RemoveAll(tempDir)
-
-	// Write runtime package.
-	runtimeDir, err := writeRuntime()
-	if err != nil {
-		return nil, fmt.Errorf("write runtime: %w", err)
-	}
 
 	// Write Go module file.
 	if err := writeFilef(filepath.Join(tempDir, "go.mod"),
@@ -226,7 +220,7 @@ require github.com/nicholasngai/cel-jit/runtime-source v0.0.0-00000000000000-000
 
 replace github.com/nicholasngai/cel-jit/runtime-source => %s
 `,
-		runtimeDir,
+		e.runtimeDir,
 	); err != nil {
 		return nil, err
 	}
@@ -301,7 +295,7 @@ var (
 		}
 
 		// Make Go source.
-		goSource, err := astToGoSource(astExpr.GetExpr(), astExpr)
+		goSource, err := e.astToGoSource(astExpr.GetExpr(), astExpr)
 		if err != nil {
 			return nil, fmt.Errorf("%q: generate Go source: %w", exprConfig.Expr, err)
 		}

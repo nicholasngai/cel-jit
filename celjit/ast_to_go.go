@@ -12,7 +12,7 @@ import (
 	expr "google.golang.org/genproto/googleapis/api/expr/v1alpha1"
 )
 
-func astToGoSource(node *expr.Expr, checkedExpr *expr.CheckedExpr) (string, error) {
+func (e *Env) astToGoSource(node *expr.Expr, checkedExpr *expr.CheckedExpr) (string, error) {
 	switch exprKind := node.GetExprKind().(type) {
 	case *expr.Expr_IdentExpr:
 		return mangleVariable(exprKind.IdentExpr.GetName()), nil
@@ -69,7 +69,7 @@ func astToGoSource(node *expr.Expr, checkedExpr *expr.CheckedExpr) (string, erro
 			elemTypeInfo.goType, len(exprKind.ListExpr.GetElements()),
 		)
 		for i, elem := range exprKind.ListExpr.GetElements() {
-			elemSource, err := astToGoSource(elem, checkedExpr)
+			elemSource, err := e.astToGoSource(elem, checkedExpr)
 			if err != nil {
 				return "", fmt.Errorf("list elem %d: %w", i, err)
 			}
@@ -119,12 +119,12 @@ func astToGoSource(node *expr.Expr, checkedExpr *expr.CheckedExpr) (string, erro
 				keyTypeInfo.goType, valTypeInfo.goType, len(exprKind.StructExpr.GetEntries()),
 			)
 			for i, entry := range exprKind.StructExpr.GetEntries() {
-				keySource, err := astToGoSource(entry.GetMapKey(), checkedExpr)
+				keySource, err := e.astToGoSource(entry.GetMapKey(), checkedExpr)
 				if err != nil {
 					return "", fmt.Errorf("map key %d: %w", i, err)
 				}
 
-				valSource, err := astToGoSource(entry.GetValue(), checkedExpr)
+				valSource, err := e.astToGoSource(entry.GetValue(), checkedExpr)
 				if err != nil {
 					return "", fmt.Errorf("map value %d: %w", i, err)
 				}
@@ -153,7 +153,7 @@ func astToGoSource(node *expr.Expr, checkedExpr *expr.CheckedExpr) (string, erro
 			return "", errors.New("message literals unsupported")
 		}
 	case *expr.Expr_SelectExpr:
-		operandGo, err := astToGoSource(exprKind.SelectExpr.GetOperand(), checkedExpr)
+		operandGo, err := e.astToGoSource(exprKind.SelectExpr.GetOperand(), checkedExpr)
 		if err != nil {
 			return "", fmt.Errorf("operand: %w", err)
 		}
@@ -199,27 +199,27 @@ func astToGoSource(node *expr.Expr, checkedExpr *expr.CheckedExpr) (string, erro
 			}
 		}
 	case *expr.Expr_ComprehensionExpr:
-		rangeGo, err := astToGoSource(exprKind.ComprehensionExpr.GetIterRange(), checkedExpr)
+		rangeGo, err := e.astToGoSource(exprKind.ComprehensionExpr.GetIterRange(), checkedExpr)
 		if err != nil {
 			return "", fmt.Errorf("range: %w", err)
 		}
 
-		accumulatorInitGo, err := astToGoSource(exprKind.ComprehensionExpr.GetAccuInit(), checkedExpr)
+		accumulatorInitGo, err := e.astToGoSource(exprKind.ComprehensionExpr.GetAccuInit(), checkedExpr)
 		if err != nil {
 			return "", fmt.Errorf("accumulator init: %w", err)
 		}
 
-		loopStepGo, err := astToGoSource(exprKind.ComprehensionExpr.GetLoopStep(), checkedExpr)
+		loopStepGo, err := e.astToGoSource(exprKind.ComprehensionExpr.GetLoopStep(), checkedExpr)
 		if err != nil {
 			return "", fmt.Errorf("loop step: %w", err)
 		}
 
-		loopCondGo, err := astToGoSource(exprKind.ComprehensionExpr.GetLoopCondition(), checkedExpr)
+		loopCondGo, err := e.astToGoSource(exprKind.ComprehensionExpr.GetLoopCondition(), checkedExpr)
 		if err != nil {
 			return "", fmt.Errorf("loop condition: %w", err)
 		}
 
-		resultGo, err := astToGoSource(exprKind.ComprehensionExpr.GetResult(), checkedExpr)
+		resultGo, err := e.astToGoSource(exprKind.ComprehensionExpr.GetResult(), checkedExpr)
 		if err != nil {
 			return "", fmt.Errorf("result: %w", err)
 		}
@@ -291,7 +291,7 @@ func astToGoSource(node *expr.Expr, checkedExpr *expr.CheckedExpr) (string, erro
 		// Arguments.
 		argsGo := make([]string, 0, len(exprKind.CallExpr.GetArgs()))
 		for i, arg := range exprKind.CallExpr.GetArgs() {
-			argGo, err := astToGoSource(arg, checkedExpr)
+			argGo, err := e.astToGoSource(arg, checkedExpr)
 			if err != nil {
 				return "", fmt.Errorf("args[%d]: %w", i, err)
 			}
@@ -299,7 +299,7 @@ func astToGoSource(node *expr.Expr, checkedExpr *expr.CheckedExpr) (string, erro
 		}
 
 		if exprKind.CallExpr.GetTarget() != nil {
-			targetGo, err := astToGoSource(exprKind.CallExpr.GetTarget(), checkedExpr)
+			targetGo, err := e.astToGoSource(exprKind.CallExpr.GetTarget(), checkedExpr)
 			if err != nil {
 				return "", fmt.Errorf("target: %w", err)
 			}

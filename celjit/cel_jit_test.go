@@ -1,7 +1,7 @@
 package celjit
 
 import (
-	"os"
+	"fmt"
 	"reflect"
 	"testing"
 	"time"
@@ -197,7 +197,7 @@ func TestConformance(t *testing.T) {
 	t.Parallel()
 
 	// Compile JIT.
-	jitFuncs, err := compileJITTests()
+	jitFuncs, err := compileJITTests(t)
 	if err != nil {
 		t.Errorf("Failed to compile JIT: %v", err)
 		return
@@ -329,7 +329,7 @@ func BenchmarkCEL(b *testing.B) {
 
 func BenchmarkJIT(b *testing.B) {
 	// Compile JIT.
-	jitFuncs, err := compileJITTests()
+	jitFuncs, err := compileJITTests(b)
 	if err != nil {
 		b.Errorf("Failed to compile JIT: %v", err)
 		return
@@ -414,7 +414,18 @@ func BenchmarkJIT(b *testing.B) {
 	}
 }
 
-func compileJITTests() ([]any, error) {
+func compileJITTests(tb testing.TB) ([]any, error) {
+	tb.Helper()
+
+	// Make env.
+	env, err := NewEnv(EnvConfig{})
+	if err != nil {
+		return nil, fmt.Errorf("new env: %w", err)
+	}
+	tb.Cleanup(func() {
+		_ = env.Cleanup()
+	})
+
 	// Compile JIT.
 	exprConfigs := make([]ExprConfig, 0, len(tests))
 	for _, test := range tests {
@@ -432,13 +443,7 @@ func compileJITTests() ([]any, error) {
 			ReturnType: test.returnType,
 		})
 	}
-	return Compile(Config{
+	return env.Compile(CompileConfig{
 		Exprs: exprConfigs,
 	})
-}
-
-func TestMain(m *testing.M) {
-	exitCode := m.Run()
-	Cleanup()
-	os.Exit(exitCode)
 }
