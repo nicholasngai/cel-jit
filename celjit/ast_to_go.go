@@ -289,7 +289,14 @@ func (e *Env) astToGoSource(node *expr.Expr, checkedExpr *expr.CheckedExpr) (str
 		), nil
 	case *expr.Expr_CallExpr:
 		// Arguments.
-		argsGo := make([]string, 0, len(exprKind.CallExpr.GetArgs()))
+		argsGo := make([]string, 0, len(exprKind.CallExpr.GetArgs())+1)
+		if exprKind.CallExpr.GetTarget() != nil {
+			targetGo, err := e.astToGoSource(exprKind.CallExpr.GetTarget(), checkedExpr)
+			if err != nil {
+				return "", fmt.Errorf("target: %w", err)
+			}
+			argsGo = append(argsGo, targetGo)
+		}
 		for i, arg := range exprKind.CallExpr.GetArgs() {
 			argGo, err := e.astToGoSource(arg, checkedExpr)
 			if err != nil {
@@ -298,52 +305,7 @@ func (e *Env) astToGoSource(node *expr.Expr, checkedExpr *expr.CheckedExpr) (str
 			argsGo = append(argsGo, argGo)
 		}
 
-		if exprKind.CallExpr.GetTarget() != nil {
-			targetGo, err := e.astToGoSource(exprKind.CallExpr.GetTarget(), checkedExpr)
-			if err != nil {
-				return "", fmt.Errorf("target: %w", err)
-			}
-
-			maybeArgGo0 := "runtime.DynValue{}"
-			if len(argsGo) >= 1 {
-				maybeArgGo0 = argsGo[0]
-			}
-			switch exprKind.CallExpr.GetFunction() {
-			case "size":
-				return fmt.Sprintf("runtime.Size(%s.DynValue())", targetGo), nil
-			case "contains":
-				return fmt.Sprintf("runtime.Contains(%s.DynValue(), %s.DynValue())", targetGo, argsGo[0]), nil
-			case "endsWith":
-				return fmt.Sprintf("runtime.EndsWith(%s.DynValue(), %s.DynValue())", targetGo, argsGo[0]), nil
-			case "matches":
-				return fmt.Sprintf("runtime.Matches(%s.DynValue(), %s.DynValue())", targetGo, argsGo[0]), nil
-			case "startsWith":
-				return fmt.Sprintf("runtime.StartsWith(%s.DynValue(), %s.DynValue())", targetGo, argsGo[0]), nil
-			case "getFullYear":
-				return fmt.Sprintf("runtime.GetFullYear(%s.DynValue(), %s.DynValue())", targetGo, maybeArgGo0), nil
-			case "getMonth":
-				return fmt.Sprintf("runtime.GetMonth(%s.DynValue(), %s.DynValue())", targetGo, maybeArgGo0), nil
-			case "getDayOfYear":
-				return fmt.Sprintf("runtime.GetDayOfYear(%s.DynValue(), %s.DynValue())", targetGo, maybeArgGo0), nil
-			case "getDate":
-				return fmt.Sprintf("runtime.GetDate(%s.DynValue(), %s.DynValue())", targetGo, maybeArgGo0), nil
-			case "getDayOfMonth":
-				return fmt.Sprintf("runtime.GetDayOfMonth(%s.DynValue(), %s.DynValue())", targetGo, maybeArgGo0), nil
-			case "getDayOfWeek":
-				return fmt.Sprintf("runtime.GetDayOfWeek(%s.DynValue(), %s.DynValue())", targetGo, maybeArgGo0), nil
-			case "getHours":
-				return fmt.Sprintf("runtime.GetHours(%s.DynValue(), %s.DynValue())", targetGo, maybeArgGo0), nil
-			case "getMinutes":
-				return fmt.Sprintf("runtime.GetMinutes(%s.DynValue(), %s.DynValue())", targetGo, maybeArgGo0), nil
-			case "getSeconds":
-				return fmt.Sprintf("runtime.GetSeconds(%s.DynValue(), %s.DynValue())", targetGo, maybeArgGo0), nil
-			case "getMilliseconds":
-				return fmt.Sprintf("runtime.GetMilliseconds(%s.DynValue(), %s.DynValue())", targetGo, maybeArgGo0), nil
-			default:
-				return "", fmt.Errorf("unsupported overload %q", exprKind.CallExpr.GetFunction())
-			}
-		}
-
+		// Handle operators. Named function calls will be handled separately below.
 		switch exprKind.CallExpr.GetFunction() {
 		case operators.Conditional:
 			resExprType, ok := checkedExpr.GetTypeMap()[node.GetId()]
@@ -844,9 +806,36 @@ func (e *Env) astToGoSource(node *expr.Expr, checkedExpr *expr.CheckedExpr) (str
 			return fmt.Sprintf("runtime.Duration(%s.DynValue())", argsGo[0]), nil
 		case "dyn":
 			return fmt.Sprintf("%s.DynValue()", argsGo[0]), nil
-		default:
+		}
+
+		// This is a named function.
+		funcConfig, ok := e.functions[exprKind.CallExpr.GetFunction()]
+		if !ok {
 			return "", fmt.Errorf("unsupported function %q", exprKind.CallExpr.GetFunction())
 		}
+		if len(argsGo) > funcConfig.maxArguments {
+			return "", fmt.Errorf("function call %q has %d args, max configured is %d", exprKind.CallExpr.GetFunction(), len(argsGo), funcConfig.maxArguments)
+		}
+
+		// TODO(nngai) Check overloads for named functions.
+
+		// Use the dynamic function name.
+		var b strings.Builder
+		b.WriteString(funcConfig.dynRuntimeName)
+		b.WriteString("(")
+		for i := range funcConfig.maxArguments {
+			if i > 0 {
+				b.WriteString(", ")
+			}
+			if i < len(argsGo) {
+				b.WriteString(argsGo[i])
+				b.WriteString(".DynValue()")
+			} else {
+				b.WriteString("runtime.DynValue{}")
+			}
+		}
+		b.WriteString(")")
+		return b.String(), nil
 	default:
 		return "", fmt.Errorf("unsupported expr kind %v", node)
 	}

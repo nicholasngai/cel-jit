@@ -62,6 +62,7 @@ type Env struct {
 	config EnvConfig
 
 	runtimeDir string
+	functions  map[string]envFunction
 
 	// Plugin loading in Go takes up memory for the lifetime of the process so
 	// we can't unload these, but we still want to dedupe programs with the same
@@ -73,6 +74,19 @@ type Env struct {
 	pluginsByHash sync.Map // [sha256.Size]byte -> func() (*plugin.Plugin, error)
 }
 
+type envFunction struct {
+	dynRuntimeName string // The name used for the dynamic variant at runtime.
+	maxArguments   int // The maximum # of arguments to the function in its overloads.
+	overloads      map[string]envFunctionOverload
+}
+
+type envFunctionOverload struct {
+	runtimeName      string
+	isMemberOverload bool
+	parameterTypes   []*cel.Type
+	returnType       *cel.Type
+}
+
 func NewEnv(config EnvConfig) (*Env, error) {
 	runtimeDir, err := writeRuntime()
 	if err != nil {
@@ -80,8 +94,10 @@ func NewEnv(config EnvConfig) (*Env, error) {
 	}
 
 	return &Env{
-		config:     config,
+		config: config,
+
 		runtimeDir: runtimeDir,
+		functions:  makeStandardEnv(), // TODO(nngai) Use custom overloads.
 	}, nil
 }
 
