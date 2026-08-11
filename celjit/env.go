@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"sync"
 
 	"github.com/google/cel-go/cel"
 	"github.com/nicholasngai/cel-jit/runtime"
@@ -61,6 +62,15 @@ type Env struct {
 	config EnvConfig
 
 	runtimeDir string
+
+	// Plugin loading in Go takes up memory for the lifetime of the process so
+	// we can't unload these, but we still want to dedupe programs with the same
+	// source compiled against the same env. This allows duplicate programs to
+	// still compile correctly---otherwise, if -trimpath is enabled, the
+	// plugin/unnamed-%x will be the same per
+	// https://cs.opensource.google/go/go/+/refs/tags/go1.26.5:src/cmd/go/internal/work/gc.go;l=559;bpv=1;bpt=0
+	// and plugin loading will fail with "plugin already loaded" error.
+	pluginsByHash sync.Map // [sha256.Size]byte -> func() (*plugin.Plugin, error)
 }
 
 func NewEnv(config EnvConfig) (*Env, error) {

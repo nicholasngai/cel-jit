@@ -156,14 +156,6 @@ func celTypeInfo(t *cel.Type) (runtimeTypeInfo, error) {
 	}
 }
 
-// Plugin loading in Go takes up memory for the lifetime of the process anyway,
-// so we might as well keep a hash of program file -> loaded plugin. This allows
-// duplicate programs to still compile correctly---otherwise, if -trimpath is
-// enabled, the plugin/unnamed-%x will be the same per
-// https://cs.opensource.google/go/go/+/refs/tags/go1.26.5:src/cmd/go/internal/work/gc.go;l=559;bpv=1;bpt=0
-// and plugin loading will fail with "plugin already loaded" error.
-var pluginsByHash sync.Map // [sha256.Size]byte -> func() (*plugin.Plugin, error)
-
 // Compile returns a JIT-compiled version of the given CEL expression. For each
 // parameter, [CompileConfig.Parameters], the returned function will be of type
 //
@@ -414,7 +406,7 @@ func program%[1]d(%[5]s) %s {
 
 		return plug, nil
 	})
-	pluginFuncAny, _ := pluginsByHash.LoadOrStore(programHash, pluginFunc)
+	pluginFuncAny, _ := e.pluginsByHash.LoadOrStore(programHash, pluginFunc)
 	pluginFunc = pluginFuncAny.(func() (*plugin.Plugin, error))
 
 	return pluginFunc()
