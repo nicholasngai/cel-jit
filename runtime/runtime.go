@@ -35,7 +35,7 @@ func Select(a any, fieldName string) (any, error) {
 	return elemVal.Interface(), nil
 }
 
-func Has(a any, fieldName string) any {
+func Has(a any, fieldName string) bool {
 	aVal := reflect.ValueOf(a)
 	if aVal.Type().Kind() != reflect.Map {
 		return false
@@ -46,10 +46,6 @@ func Has(a any, fieldName string) any {
 	}
 
 	return aVal.MapIndex(reflect.ValueOf(fieldName)).IsValid()
-}
-
-func LogicalNot(a bool) bool {
-	return !a
 }
 
 func Equals(a, b any) bool {

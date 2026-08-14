@@ -77,7 +77,7 @@ type Env struct {
 
 type envFunction struct {
 	dynRuntimeName string // The name used for the dynamic variant at runtime.
-	maxArguments   int // The maximum # of arguments to the function in its overloads.
+	maxArguments   int    // The maximum # of arguments to the function in its overloads.
 	overloads      map[string]envFunctionOverload
 }
 

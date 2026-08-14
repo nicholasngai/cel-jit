@@ -22,6 +22,10 @@ func HasMap[V any](a map[string]V, fieldName string) bool {
 	return ok
 }
 
+func LogicalNot(a bool) bool {
+	return !a
+}
+
 func LessInt64(a, b int64) bool {
 	return a < b
 }
@@ -396,7 +400,7 @@ func IndexMap[K comparable, V any](a map[K]V, b K) (V, error) {
 	return zeroV, fmt.Errorf("no such key %v", b)
 }
 
-func InList[T any, U any](a T, b []T) bool {
+func InList[T any](a any, b []T) bool {
 	for _, elem := range b {
 		if Equals(elem, a) {
 			return true

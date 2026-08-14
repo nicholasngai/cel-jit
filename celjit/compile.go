@@ -40,6 +40,79 @@ type runtimeTypeInfo struct {
 	equaler   func(string, string) string
 }
 
+var (
+	dynTypeInfo = runtimeTypeInfo{
+		goType: "any",
+		converter: func(aw *astWriter, w io.Writer, s string) string {
+			return fmt.Sprintf("any(%s)", s)
+		},
+		equaler: func(a, b string) string { return fmt.Sprintf("runtime.Eq(%s, %s)", a, b) },
+	}
+	intTypeInfo = runtimeTypeInfo{
+		goType: "int64",
+		converter: func(aw *astWriter, w io.Writer, s string) string {
+			return aw.handleErr(w, fmt.Sprintf("runtime.ToValue[int64](%s)", s))
+		},
+		equaler: func(a, b string) string { return fmt.Sprintf("(%s == %s)", a, b) },
+	}
+	uintTypeInfo = runtimeTypeInfo{
+		goType: "uint64",
+		converter: func(aw *astWriter, w io.Writer, s string) string {
+			return aw.handleErr(w, fmt.Sprintf("runtime.ToValue[uint64](%s)", s))
+		},
+		equaler: func(a, b string) string { return fmt.Sprintf("(%s == %s)", a, b) },
+	}
+	doubleTypeInfo = runtimeTypeInfo{
+		goType: "float64",
+		converter: func(aw *astWriter, w io.Writer, s string) string {
+			return aw.handleErr(w, fmt.Sprintf("runtime.ToValue[float64](%s)", s))
+		},
+		equaler: func(a, b string) string { return fmt.Sprintf("(%s == %s)", a, b) },
+	}
+	boolTypeInfo = runtimeTypeInfo{
+		goType: "bool",
+		converter: func(aw *astWriter, w io.Writer, s string) string {
+			return aw.handleErr(w, fmt.Sprintf("runtime.ToValue[bool](%s)", s))
+		},
+		equaler: func(a, b string) string { return fmt.Sprintf("(%s == %s)", a, b) },
+	}
+	stringTypeInfo = runtimeTypeInfo{
+		goType: "string",
+		converter: func(aw *astWriter, w io.Writer, s string) string {
+			return aw.handleErr(w, fmt.Sprintf("runtime.ToValue[string](%s)", s))
+		},
+		equaler: func(a, b string) string { return fmt.Sprintf("(%s == %s)", a, b) },
+	}
+	bytesTypeInfo = runtimeTypeInfo{
+		goType: "[]byte",
+		converter: func(aw *astWriter, w io.Writer, s string) string {
+			return aw.handleErr(w, fmt.Sprintf("runtime.ToValue[[]byte](%s)", s))
+		},
+		equaler: func(a, b string) string { return fmt.Sprintf("slices.Equal(%s, %s)", a, b) },
+	}
+	timestampTypeInfo = runtimeTypeInfo{
+		goType: "time.Time",
+		converter: func(aw *astWriter, w io.Writer, s string) string {
+			return aw.handleErr(w, fmt.Sprintf("runtime.ToValue[time.Time](%s)", s))
+		},
+		equaler: func(a, b string) string { return fmt.Sprintf("%s.Equal(%s)", a, b) },
+	}
+	durationTypeInfo = runtimeTypeInfo{
+		goType: "time.Duration",
+		converter: func(aw *astWriter, w io.Writer, s string) string {
+			return aw.handleErr(w, fmt.Sprintf("runtime.ToValue[time.Duration](%s)", s))
+		},
+		equaler: func(a, b string) string { return fmt.Sprintf("(%s == %s))", a, b) },
+	}
+	nullTypeInfo = runtimeTypeInfo{
+		goType: "struct{}",
+		converter: func(aw *astWriter, w io.Writer, s string) string {
+			return aw.handleErr(w, fmt.Sprintf("runtime.ToValue[struct{}](%s)", s))
+		},
+		equaler: func(a, b string) string { return "true" },
+	}
+)
+
 // celTypeInfo maps CEL types to their JIT runtime types.
 func celTypeInfo(t *cel.Type) (runtimeTypeInfo, error) {
 	switch t.Kind() {
@@ -79,65 +152,25 @@ func celTypeInfo(t *cel.Type) (runtimeTypeInfo, error) {
 
 	switch t {
 	case cel.DynType:
-		return runtimeTypeInfo{
-			goType:    "any",
-			converter: func(aw *astWriter, w io.Writer, s string) string { return fmt.Sprintf("%s.DynValue()", s) },
-			equaler:   func(a, b string) string { return fmt.Sprintf("runtime.Eq(%s, %s)", a, b) },
-		}, nil
+		return dynTypeInfo, nil
 	case cel.IntType:
-		return runtimeTypeInfo{
-			goType:    "int64",
-			converter: func(aw *astWriter, w io.Writer, s string) string { return fmt.Sprintf("%s.IntValue()", s) },
-			equaler:   func(a, b string) string { return fmt.Sprintf("(%s == %s)", a, b) },
-		}, nil
+		return intTypeInfo, nil
 	case cel.UintType:
-		return runtimeTypeInfo{
-			goType:    "uint64",
-			converter: func(aw *astWriter, w io.Writer, s string) string { return fmt.Sprintf("%s.UintValue()", s) },
-			equaler:   func(a, b string) string { return fmt.Sprintf("(%s == %s)", a, b) },
-		}, nil
+		return uintTypeInfo, nil
 	case cel.DoubleType:
-		return runtimeTypeInfo{
-			goType:    "float64",
-			converter: func(aw *astWriter, w io.Writer, s string) string { return fmt.Sprintf("%s.DoubleValue()", s) },
-			equaler:   func(a, b string) string { return fmt.Sprintf("(%s == %s)", a, b) },
-		}, nil
+		return doubleTypeInfo, nil
 	case cel.BoolType:
-		return runtimeTypeInfo{
-			goType:    "bool",
-			converter: func(aw *astWriter, w io.Writer, s string) string { return fmt.Sprintf("%s.BoolValue()", s) },
-			equaler:   func(a, b string) string { return fmt.Sprintf("(%s == %s)", a, b) },
-		}, nil
+		return boolTypeInfo, nil
 	case cel.StringType:
-		return runtimeTypeInfo{
-			goType:    "string",
-			converter: func(aw *astWriter, w io.Writer, s string) string { return fmt.Sprintf("%s.StringValue()", s) },
-			equaler:   func(a, b string) string { return fmt.Sprintf("(%s == %s)", a, b) },
-		}, nil
+		return stringTypeInfo, nil
 	case cel.BytesType:
-		return runtimeTypeInfo{
-			goType:    "[]byte",
-			converter: func(aw *astWriter, w io.Writer, s string) string { return fmt.Sprintf("%s.BytesValue()", s) },
-			equaler:   func(a, b string) string { return fmt.Sprintf("slices.Equal(%s, %s)", a, b) },
-		}, nil
+		return bytesTypeInfo, nil
 	case cel.TimestampType:
-		return runtimeTypeInfo{
-			goType:    "time.Time",
-			converter: func(aw *astWriter, w io.Writer, s string) string { return fmt.Sprintf("%s.TimestampValue()", s) },
-			equaler:   func(a, b string) string { return fmt.Sprintf("%s.Equal(%s)", a, b) },
-		}, nil
+		return timestampTypeInfo, nil
 	case cel.DurationType:
-		return runtimeTypeInfo{
-			goType:    "time.Duration",
-			converter: func(aw *astWriter, w io.Writer, s string) string { return fmt.Sprintf("%s.DurationValue()", s) },
-			equaler:   func(a, b string) string { return fmt.Sprintf("(%s == %s))", a, b) },
-		}, nil
+		return durationTypeInfo, nil
 	case cel.NullType:
-		return runtimeTypeInfo{
-			goType:    "struct{}",
-			converter: func(aw *astWriter, w io.Writer, s string) string { return fmt.Sprintf("%s.NullValue()", s) },
-			equaler:   func(a, b string) string { return "true" },
-		}, nil
+		return nullTypeInfo, nil
 	default:
 		return runtimeTypeInfo{}, fmt.Errorf("unhandled type %v", t)
 	}
@@ -329,7 +362,7 @@ func Program%d(%s) (%s, error) {
 `,
 			i,
 			repeat("%s %s", runtimeParameters, func(r runtimeParameter) []any {
-				return []any{mangleParameter(r.parameter.Name), r.typeInfo.goType}
+				return []any{mangleVariable(r.parameter.Name), r.typeInfo.goType}
 			}),
 			returnTypeInfo.goType,
 			returnTypeInfo.goType,

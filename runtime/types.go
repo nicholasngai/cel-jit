@@ -5,6 +5,15 @@ import (
 	"reflect"
 )
 
+func ToValue[T any](v any) (T, error) {
+	var zeroT T
+	if v, ok := v.(T); ok {
+		return v, nil
+	} else {
+		return zeroT, fmt.Errorf("%v is not a %T", v, zeroT)
+	}
+}
+
 func ToListValue[T any](v any) ([]T, error) {
 	switch v := any(v).(type) {
 	case []T:
