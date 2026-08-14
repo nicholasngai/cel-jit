@@ -196,10 +196,12 @@ func (e *Env) compilePlugin(config CompileConfig) (*plugin.Plugin, error) {
 
 go 1.26.0
 
-require github.com/nicholasngai/cel-jit/runtime-source v0.0.0-00000000000000-000000000000
+require github.com/nicholasngai/cel-jit/%s v0.0.0-00000000000000-000000000000
 
-replace github.com/nicholasngai/cel-jit/runtime-source => %s
+replace github.com/nicholasngai/cel-jit/%s => %s
 `,
+		filepath.Base(e.runtimeDir),
+		filepath.Base(e.runtimeDir),
 		e.runtimeDir,
 	); err != nil {
 		return nil, err
@@ -215,7 +217,7 @@ replace github.com/nicholasngai/cel-jit/runtime-source => %s
 	program := io.MultiWriter(programHasher, programFile)
 
 	// Write header.
-	if _, err := fmt.Fprint(program,
+	if _, err := fmt.Fprintf(program,
 		`package main
 
 import (
@@ -225,7 +227,7 @@ import (
 	"slices"
 	"time"
 
-	"github.com/nicholasngai/cel-jit/runtime-source/runtime"
+	"github.com/nicholasngai/cel-jit/%s/runtime"
 )
 
 var (
@@ -237,6 +239,7 @@ var (
 	_ = time.Parse
 )
 `,
+		filepath.Base(e.runtimeDir),
 	); err != nil {
 		return nil, fmt.Errorf("write program.go: %w", err)
 	}

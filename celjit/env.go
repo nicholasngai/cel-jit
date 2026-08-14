@@ -116,10 +116,12 @@ func writeRuntime() (_ string, retErr error) {
 
 	// Write Go module file.
 	if err := writeFilef(filepath.Join(dir, "go.mod"),
-		`module github.com/nicholasngai/cel-jit/runtime-source
+		`module github.com/nicholasngai/cel-jit/%s
 
 go 1.26.0
-`); err != nil {
+`,
+		filepath.Base(dir),
+	); err != nil {
 		return "", err
 	}
 
