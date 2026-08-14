@@ -250,34 +250,55 @@ func (aw *astWriter) writeGoSourceForAst(w io.Writer, node *expr.Expr, checkedEx
 		// Handle logical AND, OR, and conditional first since those have lazy
 		// eval semantics.
 		switch exprKind.CallExpr.GetFunction() {
-	//	case operators.Conditional:
-	//		resExprType, ok := checkedExpr.GetTypeMap()[node.GetId()]
-	//		if !ok {
-	//			return "", fmt.Errorf("no type info for node %d", node.GetId())
-	//		}
-	//		resType, err := cel.ExprTypeToType(resExprType)
-	//		if err != nil {
-	//			return "", fmt.Errorf("expr type %v to CEL type", resExprType)
-	//		}
-	//		resTypeInfo, err := celTypeInfo(resType)
-	//		if err != nil {
-	//			return "", fmt.Errorf("result type %v to runtime types: %w", resType, err)
-	//		}
+		case operators.Conditional:
+			resExprType, ok := checkedExpr.GetTypeMap()[node.GetId()]
+			if !ok {
+				return "", fmt.Errorf("no type info for node %d", node.GetId())
+			}
+			resType, err := cel.ExprTypeToType(resExprType)
+			if err != nil {
+				return "", fmt.Errorf("expr type %v to CEL type", resExprType)
+			}
+			resTypeInfo, err := celTypeInfo(resType)
+			if err != nil {
+				return "", fmt.Errorf("result type %v to runtime types: %w", resType, err)
+			}
 
-	//		return fmt.Sprintf(`(func() %s {
-	//			cond := %s
-	//			if cond.Err != nil {
-	//				return %[1]s{Err: cond.Err}
-	//			}
+			condGo, err := aw.writeGoSourceForAst(w, exprKind.CallExpr.GetArgs()[0], checkedExpr)
+			if err != nil {
+				return "", fmt.Errorf("cond: %w", err)
+			}
 
-	//			if cond.Val {
-	//				return %[3]s
-	//			} else {
-	//				return %[4]s
-	//			}
-	//		})()`,
-	//			resTypeInfo.runtimeType, argsGo[0], resTypeInfo.converter(argsGo[1]), resTypeInfo.converter(argsGo[2]),
-	//		), nil
+			// Write ifTrue and ifFalse to builder since this will have to be
+			// nested inside the larger statement.
+			var b strings.Builder
+			ifTrueGo, err := aw.writeGoSourceForAst(w, exprKind.CallExpr.GetArgs()[1], checkedExpr)
+			if err != nil {
+				return "", fmt.Errorf("consequent: %w", err)
+			}
+			ifTrueStmt := b.String()
+			b.Reset()
+			ifFalseGo, err := aw.writeGoSourceForAst(w, exprKind.CallExpr.GetArgs()[2], checkedExpr)
+			if err != nil {
+				return "", fmt.Errorf("alternative: %w", err)
+			}
+			ifFalseStmt := b.String()
+
+			freindentf(w, `
+				var v%d %s
+				if any(%s).(bool) {
+					%s
+					v%[1]d = %[5]s
+				} else {
+					%s
+					v%[1]d = %[7]s
+				}
+				`,
+				aw.valIdx, resTypeInfo.goType, condGo, ifTrueStmt, ifTrueGo, ifFalseStmt, ifFalseGo,
+			)
+			ret := fmt.Sprintf("v%d", aw.valIdx)
+			aw.valIdx += 1
+			return ret, nil
 		case operators.LogicalAnd:
 			// Write left and write to builder since this will have to be nested
 			// inside the larger statement.
@@ -380,58 +401,6 @@ func (aw *astWriter) writeGoSourceForAst(w io.Writer, node *expr.Expr, checkedEx
 			ret := fmt.Sprintf("v%d", aw.valIdx)
 			aw.valIdx += 1
 			return ret, nil
-	//	case operators.LogicalNot:
-	//		return fmt.Sprintf("runtime.LogicalNot(%s)", argsGo[0]), nil
-	//	case operators.Equals, operators.NotEquals:
-	//		// If the types aren't the same, fall back to dynamic type checking.
-	//		leftExprType, ok := checkedExpr.GetTypeMap()[exprKind.CallExpr.GetArgs()[0].GetId()]
-	//		if !ok {
-	//			return "", fmt.Errorf("no type info for node %d", node.GetId())
-	//		}
-	//		leftType, err := cel.ExprTypeToType(leftExprType)
-	//		if err != nil {
-	//			return "", fmt.Errorf("expr type %v to CEL type", leftExprType)
-	//		}
-	//		leftTypeInfo, err := celTypeInfo(leftType)
-	//		if err != nil {
-	//			return "", fmt.Errorf("left type %v to runtime types: %w", leftType, err)
-	//		}
-	//		rightExprType, ok := checkedExpr.GetTypeMap()[exprKind.CallExpr.GetArgs()[1].GetId()]
-	//		if !ok {
-	//			return "", fmt.Errorf("no type info for node %d", node.GetId())
-	//		}
-	//		rightType, err := cel.ExprTypeToType(rightExprType)
-	//		if err != nil {
-	//			return "", fmt.Errorf("expr type %v to CEL type", rightExprType)
-	//		}
-	//		if !rightType.IsExactType(leftType) {
-	//			if exprKind.CallExpr.GetFunction() == operators.Equals {
-	//				return fmt.Sprintf("runtime.Equals(%s, %s)", argsGo[0], argsGo[1]), nil
-	//			} else {
-	//				return fmt.Sprintf("runtime.NotEquals(%s, %s)", argsGo[0], argsGo[1]), nil
-	//			}
-	//		}
-
-	//		negaterIfNotEquals := ""
-	//		if exprKind.CallExpr.GetFunction() == operators.NotEquals {
-	//			negaterIfNotEquals = "!"
-	//		}
-	//		return fmt.Sprintf(`(func() runtime.BoolValue {
-	//			left := %s
-	//			right := %s
-	//			if left.Err != nil {
-	//				return runtime.BoolValue{Err: left.Err}
-	//			}
-	//			if right.Err != nil {
-	//				return runtime.BoolValue{Err: right.Err}
-	//			}
-	//			return runtime.BoolValue{Val: %s%s}
-	//		})()`,
-	//			argsGo[0],
-	//			argsGo[1],
-	//			negaterIfNotEquals,
-	//			leftTypeInfo.equaler("left.Val", "right.Val"),
-	//		), nil
 		}
 
 		// Arguments.
@@ -453,6 +422,44 @@ func (aw *astWriter) writeGoSourceForAst(w io.Writer, node *expr.Expr, checkedEx
 
 		// Handle operators. Named function calls will be handled separately below.
 		switch exprKind.CallExpr.GetFunction() {
+		case operators.LogicalNot:
+			// TODO(nngai) Overload boolean.
+			return aw.handleErr(w, fmt.Sprintf("runtime.LogicalNot(%s)", argsGo[0])), nil
+		case operators.Equals, operators.NotEquals:
+			// If the types aren't the same, fall back to dynamic type checking.
+			leftExprType, ok := checkedExpr.GetTypeMap()[exprKind.CallExpr.GetArgs()[0].GetId()]
+			if !ok {
+				return "", fmt.Errorf("no type info for node %d", node.GetId())
+			}
+			leftType, err := cel.ExprTypeToType(leftExprType)
+			if err != nil {
+				return "", fmt.Errorf("expr type %v to CEL type", leftExprType)
+			}
+			leftTypeInfo, err := celTypeInfo(leftType)
+			if err != nil {
+				return "", fmt.Errorf("left type %v to runtime types: %w", leftType, err)
+			}
+			rightExprType, ok := checkedExpr.GetTypeMap()[exprKind.CallExpr.GetArgs()[1].GetId()]
+			if !ok {
+				return "", fmt.Errorf("no type info for node %d", node.GetId())
+			}
+			rightType, err := cel.ExprTypeToType(rightExprType)
+			if err != nil {
+				return "", fmt.Errorf("expr type %v to CEL type", rightExprType)
+			}
+			if !rightType.IsExactType(leftType) {
+				if exprKind.CallExpr.GetFunction() == operators.Equals {
+					return fmt.Sprintf("runtime.Equals(%s, %s)", argsGo[0], argsGo[1]), nil
+				} else {
+					return fmt.Sprintf("runtime.NotEquals(%s, %s)", argsGo[0], argsGo[1]), nil
+				}
+			}
+
+			if exprKind.CallExpr.GetFunction() == operators.Equals {
+				return leftTypeInfo.equaler(argsGo[0], argsGo[1]), nil
+			} else {
+				return fmt.Sprintf("!%s", leftTypeInfo.equaler(argsGo[0], argsGo[1])), nil
+			}
 	//	case operators.Less:
 	//		switch extractOverloadID(checkedExpr.GetReferenceMap()[node.GetId()].GetOverloadId()) {
 	//		case overloads.LessInt64:

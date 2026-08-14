@@ -346,10 +346,11 @@ func Program%d(%s) (%s, error) {
 		// Write epilogue.
 		if _, err := fmt.Fprintf(program,
 			`
-	return %s, nil
+	return any(%s).(%s), nil
 }
 `,
 			goSource,
+			returnTypeInfo.goType,
 		); err != nil {
 			return nil, err
 		}
