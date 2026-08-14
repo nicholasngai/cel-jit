@@ -371,7 +371,8 @@ var (
 		}
 
 		// Make Go source.
-		goSource, err := (&astWriter{env: e}).writeGoSourceForAst(program, astExpr.GetExpr(), astExpr)
+		aw := &astWriter{env: e}
+		goSource, err := aw.writeGoSourceForAst(program, astExpr.GetExpr(), astExpr)
 		if err != nil {
 			return nil, fmt.Errorf("%q: generate Go source: %w", exprConfig.Expr, err)
 		}
@@ -379,11 +380,10 @@ var (
 		// Write epilogue.
 		if _, err := freindentfLevel(program, 0, `
 
-				return any(%s).(%s), nil
+				return %s, nil
 			}
 			`,
-			goSource,
-			returnTypeInfo.goType,
+			returnTypeInfo.converter(aw, program, goSource),
 		); err != nil {
 			return nil, err
 		}
