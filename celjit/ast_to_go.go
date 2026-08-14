@@ -813,10 +813,6 @@ func (aw *astWriter) writeGoSourceForAst(w io.Writer, node *expr.Expr, checkedEx
 			default:
 				return aw.handleErr(w, fmt.Sprintf("runtime.In(%s, %s)", argsGo[0], argsGo[1])), nil
 			}
-		case "size":
-			return fmt.Sprintf("runtime.Size(%s)", argsGo[0]), nil
-		case "matches":
-			return fmt.Sprintf("runtime.Matches(%s, %s)", argsGo[0], argsGo[1]), nil
 		case overloads.TypeConvertInt:
 			return aw.handleErr(w, fmt.Sprintf("runtime.Int(%s)", argsGo[0])), nil
 		case overloads.TypeConvertUint:
@@ -835,38 +831,36 @@ func (aw *astWriter) writeGoSourceForAst(w io.Writer, node *expr.Expr, checkedEx
 			return aw.handleErr(w, fmt.Sprintf("runtime.Duration(%s)", argsGo[0])), nil
 		case overloads.TypeConvertDyn:
 			return argsGo[0], nil
-		default:
-			return "", fmt.Errorf("unsupported function %q", exprKind.CallExpr.GetFunction())
 		}
 
-	//	// This is a named function.
-	//	funcConfig, ok := e.functions[exprKind.CallExpr.GetFunction()]
-	//	if !ok {
-	//		return "", fmt.Errorf("unsupported function %q", exprKind.CallExpr.GetFunction())
-	//	}
-	//	if len(argsGo) > funcConfig.maxArguments {
-	//		return "", fmt.Errorf("function call %q has %d args, max configured is %d", exprKind.CallExpr.GetFunction(), len(argsGo), funcConfig.maxArguments)
-	//	}
+		// This is a named function.
+		funcConfig, ok := aw.env.functions[exprKind.CallExpr.GetFunction()]
+		if !ok {
+			return "", fmt.Errorf("unsupported function %q", exprKind.CallExpr.GetFunction())
+		}
+		if len(argsGo) > funcConfig.maxArguments {
+			return "", fmt.Errorf("function call %q has %d args, max configured is %d", exprKind.CallExpr.GetFunction(), len(argsGo), funcConfig.maxArguments)
+		}
 
-	//	// TODO(nngai) Check overloads for named functions.
+		// TODO(nngai) Check overloads for named functions.
 
-	//	// Use the dynamic function name.
-	//	var b strings.Builder
-	//	b.WriteString(funcConfig.dynRuntimeName)
-	//	b.WriteString("(")
-	//	for i := range funcConfig.maxArguments {
-	//		if i > 0 {
-	//			b.WriteString(", ")
-	//		}
-	//		if i < len(argsGo) {
-	//			b.WriteString(argsGo[i])
-	//			b.WriteString("")
-	//		} else {
-	//			b.WriteString("runtime.DynValue{}")
-	//		}
-	//	}
-	//	b.WriteString(")")
-	//	return b.String(), nil
+		// Use the dynamic function name.
+		var b strings.Builder
+		b.WriteString(funcConfig.dynRuntimeName)
+		b.WriteString("(")
+		for i := range funcConfig.maxArguments {
+			if i > 0 {
+				b.WriteString(", ")
+			}
+			if i < len(argsGo) {
+				b.WriteString(argsGo[i])
+				b.WriteString("")
+			} else {
+				b.WriteString("nil")
+			}
+		}
+		b.WriteString(")")
+		return aw.handleErr(w, b.String()), nil
 	default:
 		return "", fmt.Errorf("unsupported expr kind %v", node)
 	}
