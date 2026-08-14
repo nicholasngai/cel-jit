@@ -353,13 +353,13 @@ var (
 		}
 
 		// Write program prologue.
-		if _, err := fmt.Fprintf(program,
-			`
-func Program%d(%s) (%s, error) {
-	var zero %s
-	_ = zero
+		if _, err := freindentfLevel(program, 0, `
 
-`,
+			func Program%d(%s) (%s, error) {
+				var zero %s
+				_ = zero
+
+			`,
 			i,
 			repeat("%s %s", runtimeParameters, func(r runtimeParameter) []any {
 				return []any{mangleVariable(r.parameter.Name), r.typeInfo.goType}
@@ -377,11 +377,11 @@ func Program%d(%s) (%s, error) {
 		}
 
 		// Write epilogue.
-		if _, err := fmt.Fprintf(program,
-			`
-	return any(%s).(%s), nil
-}
-`,
+		if _, err := freindentfLevel(program, 0, `
+
+				return any(%s).(%s), nil
+			}
+			`,
 			goSource,
 			returnTypeInfo.goType,
 		); err != nil {
