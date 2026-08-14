@@ -5,939 +5,432 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"time"
 )
 
-func SelectMap[Val ~struct{Val V; Err error}, V any](a MapValue[string, V], fieldName string) Val {
-	if a.Err != nil {
-		return Val{Err: a.Err}
-	}
-
-	elem, ok := a.Val[fieldName]
+func SelectMap[V any](a map[string]V, fieldName string) (V, error) {
+	elem, ok := a[fieldName]
 	if !ok {
-		return Val{Err: fmt.Errorf("no such key %v", fieldName)}
+		var zeroV V
+		return zeroV, fmt.Errorf("no such key %v", fieldName)
 	}
-	return Val{Val: elem}
+	return elem, nil
 }
 
-func HasMap[V any](a MapValue[string, V], fieldName string) BoolValue {
-	if a.Err != nil {
-		return BoolValue{Err: a.Err}
-	}
-
-	_, ok := a.Val[fieldName]
-	return BoolValue{Val: ok}
+func HasMap[V any](a map[string]V, fieldName string) bool {
+	_, ok := a[fieldName]
+	return ok
 }
 
-func LessInt64(a, b IntValue) BoolValue {
-	if a.Err != nil {
-		return BoolValue{Err: a.Err}
-	}
-	if b.Err != nil {
-		return BoolValue{Err: b.Err}
-	}
-	return BoolValue{Val: a.Val < b.Val}
+func LessInt64(a, b int64) bool {
+	return a < b
 }
 
-func LessInt64Uint64(a IntValue, b UintValue) BoolValue {
-	if a.Err != nil {
-		return BoolValue{Err: a.Err}
-	}
-	if b.Err != nil {
-		return BoolValue{Err: b.Err}
-	}
-	return BoolValue{Val: a.Val < 0 || uint64(a.Val) < b.Val}
+func LessInt64Uint64(a int64, b uint64) bool {
+	return a < 0 || uint64(a) < b
 }
 
-func LessInt64Double(a IntValue, b DoubleValue) BoolValue {
-	if a.Err != nil {
-		return BoolValue{Err: a.Err}
-	}
-	if b.Err != nil {
-		return BoolValue{Err: b.Err}
-	}
-	return BoolValue{Val: float64(a.Val) < b.Val}
+func LessInt64Double(a int64, b float64) bool {
+	return float64(a) < b
 }
 
-func LessUint64(a, b UintValue) BoolValue {
-	if a.Err != nil {
-		return BoolValue{Err: a.Err}
-	}
-	if b.Err != nil {
-		return BoolValue{Err: b.Err}
-	}
-	return BoolValue{Val: a.Val < b.Val}
+func LessUint64(a, b uint64) bool {
+	return a < b
 }
 
-func LessUint64Int64(a UintValue, b IntValue) BoolValue {
-	if a.Err != nil {
-		return BoolValue{Err: a.Err}
-	}
-	if b.Err != nil {
-		return BoolValue{Err: b.Err}
-	}
-	return BoolValue{Val: b.Val >= 0 && a.Val < uint64(b.Val)}
+func LessUint64Int64(a uint64, b int64) bool {
+	return b >= 0 && a < uint64(b)
 }
 
-func LessUint64Double(a UintValue, b DoubleValue) BoolValue {
-	if a.Err != nil {
-		return BoolValue{Err: a.Err}
-	}
-	if b.Err != nil {
-		return BoolValue{Err: b.Err}
-	}
-	return BoolValue{Val: float64(a.Val) < b.Val}
+func LessUint64Double(a uint64, b float64) bool {
+	return float64(a) < b
 }
 
-func LessDouble(a, b DoubleValue) BoolValue {
-	if a.Err != nil {
-		return BoolValue{Err: a.Err}
-	}
-	if b.Err != nil {
-		return BoolValue{Err: b.Err}
-	}
-	return BoolValue{Val: a.Val < b.Val}
+func LessDouble(a, b float64) bool {
+	return a < b
 }
 
-func LessDoubleInt64(a DoubleValue, b IntValue) BoolValue {
-	if a.Err != nil {
-		return BoolValue{Err: a.Err}
-	}
-	if b.Err != nil {
-		return BoolValue{Err: b.Err}
-	}
-	return BoolValue{Val: a.Val < float64(b.Val)}
+func LessDoubleInt64(a float64, b int64) bool {
+	return a < float64(b)
 }
 
-func LessDoubleUint64(a DoubleValue, b UintValue) BoolValue {
-	if a.Err != nil {
-		return BoolValue{Err: a.Err}
-	}
-	if b.Err != nil {
-		return BoolValue{Err: b.Err}
-	}
-	return BoolValue{Val: a.Val < float64(b.Val)}
+func LessDoubleUint64(a float64, b uint64) bool {
+	return a < float64(b)
 }
 
-func LessBool(a, b BoolValue) BoolValue {
-	if a.Err != nil {
-		return BoolValue{Err: a.Err}
-	}
-	if b.Err != nil {
-		return BoolValue{Err: b.Err}
-	}
-	return BoolValue{Val: !a.Val && b.Val}
+func LessBool(a, b bool) bool {
+	return !a && b
 }
 
-func LessString(a, b StringValue) BoolValue {
-	if a.Err != nil {
-		return BoolValue{Err: a.Err}
-	}
-	if b.Err != nil {
-		return BoolValue{Err: b.Err}
-	}
-	return BoolValue{Val: a.Val < b.Val}
+func LessString(a, b string) bool {
+	return a < b
 }
 
-func LessBytes(a, b BytesValue) BoolValue {
-	if a.Err != nil {
-		return BoolValue{Err: a.Err}
-	}
-	if b.Err != nil {
-		return BoolValue{Err: b.Err}
-	}
-	return BoolValue{Val: bytes.Compare(a.Val, b.Val) < 0}
+func LessBytes(a, b []byte) bool {
+	return bytes.Compare(a, b) < 0
 }
 
-func LessTimestamp(a, b TimestampValue) BoolValue {
-	if a.Err != nil {
-		return BoolValue{Err: a.Err}
-	}
-	if b.Err != nil {
-		return BoolValue{Err: b.Err}
-	}
-	return BoolValue{Val: a.Val.Compare(b.Val) < 0}
+func LessTimestamp(a, b time.Time) bool {
+	return a.Compare(b) < 0
 }
 
-func LessDuration(a, b DurationValue) BoolValue {
-	if a.Err != nil {
-		return BoolValue{Err: a.Err}
-	}
-	if b.Err != nil {
-		return BoolValue{Err: b.Err}
-	}
-	return BoolValue{Val: a.Val < b.Val}
+func LessDuration(a, b time.Duration) bool {
+	return a < b
 }
 
-func LessEqualsInt64(a, b IntValue) BoolValue {
-	if a.Err != nil {
-		return BoolValue{Err: a.Err}
-	}
-	if b.Err != nil {
-		return BoolValue{Err: b.Err}
-	}
-	return BoolValue{Val: a.Val <= b.Val}
+func LessEqualsInt64(a, b int64) bool {
+	return a <= b
 }
 
-func LessEqualsInt64Uint64(a IntValue, b UintValue) BoolValue {
-	if a.Err != nil {
-		return BoolValue{Err: a.Err}
-	}
-	if b.Err != nil {
-		return BoolValue{Err: b.Err}
-	}
-	return BoolValue{Val: a.Val < 0 || uint64(a.Val) <= b.Val}
+func LessEqualsInt64Uint64(a int64, b uint64) bool {
+	return a < 0 || uint64(a) <= b
 }
 
-func LessEqualsInt64Double(a IntValue, b DoubleValue) BoolValue {
-	if a.Err != nil {
-		return BoolValue{Err: a.Err}
-	}
-	if b.Err != nil {
-		return BoolValue{Err: b.Err}
-	}
-	return BoolValue{Val: float64(a.Val) <= b.Val}
+func LessEqualsInt64Double(a int64, b float64) bool {
+	return float64(a) <= b
 }
 
-func LessEqualsUint64(a, b UintValue) BoolValue {
-	if a.Err != nil {
-		return BoolValue{Err: a.Err}
-	}
-	if b.Err != nil {
-		return BoolValue{Err: b.Err}
-	}
-	return BoolValue{Val: a.Val <= b.Val}
+func LessEqualsUint64(a, b uint64) bool {
+	return a <= b
 }
 
-func LessEqualsUint64Int64(a UintValue, b IntValue) BoolValue {
-	if a.Err != nil {
-		return BoolValue{Err: a.Err}
-	}
-	if b.Err != nil {
-		return BoolValue{Err: b.Err}
-	}
-	return BoolValue{Val: b.Val >= 0 && a.Val <= uint64(b.Val)}
+func LessEqualsUint64Int64(a uint64, b int64) bool {
+	return b >= 0 && a <= uint64(b)
 }
 
-func LessEqualsUint64Double(a UintValue, b DoubleValue) BoolValue {
-	if a.Err != nil {
-		return BoolValue{Err: a.Err}
-	}
-	if b.Err != nil {
-		return BoolValue{Err: b.Err}
-	}
-	return BoolValue{Val: float64(a.Val) <= b.Val}
+func LessEqualsUint64Double(a uint64, b float64) bool {
+	return float64(a) <= b
 }
 
-func LessEqualsDouble(a, b DoubleValue) BoolValue {
-	if a.Err != nil {
-		return BoolValue{Err: a.Err}
-	}
-	if b.Err != nil {
-		return BoolValue{Err: b.Err}
-	}
-	return BoolValue{Val: a.Val <= b.Val}
+func LessEqualsDouble(a, b float64) bool {
+	return a <= b
 }
 
-func LessEqualsDoubleInt64(a DoubleValue, b IntValue) BoolValue {
-	if a.Err != nil {
-		return BoolValue{Err: a.Err}
-	}
-	if b.Err != nil {
-		return BoolValue{Err: b.Err}
-	}
-	return BoolValue{Val: a.Val <= float64(b.Val)}
+func LessEqualsDoubleInt64(a float64, b int64) bool {
+	return a <= float64(b)
 }
 
-func LessEqualsDoubleUint64(a DoubleValue, b UintValue) BoolValue {
-	if a.Err != nil {
-		return BoolValue{Err: a.Err}
-	}
-	if b.Err != nil {
-		return BoolValue{Err: b.Err}
-	}
-	return BoolValue{Val: a.Val <= float64(b.Val)}
+func LessEqualsDoubleUint64(a float64, b uint64) bool {
+	return a <= float64(b)
 }
 
-func LessEqualsBool(a, b BoolValue) BoolValue {
-	if a.Err != nil {
-		return BoolValue{Err: a.Err}
-	}
-	if b.Err != nil {
-		return BoolValue{Err: b.Err}
-	}
-	return BoolValue{Val: !a.Val || b.Val}
+func LessEqualsBool(a, b bool) bool {
+	return !a || b
 }
 
-func LessEqualsString(a, b StringValue) BoolValue {
-	if a.Err != nil {
-		return BoolValue{Err: a.Err}
-	}
-	if b.Err != nil {
-		return BoolValue{Err: b.Err}
-	}
-	return BoolValue{Val: a.Val <= b.Val}
+func LessEqualsString(a, b string) bool {
+	return a <= b
 }
 
-func LessEqualsBytes(a, b BytesValue) BoolValue {
-	if a.Err != nil {
-		return BoolValue{Err: a.Err}
-	}
-	if b.Err != nil {
-		return BoolValue{Err: b.Err}
-	}
-	return BoolValue{Val: bytes.Compare(a.Val, b.Val) <= 0}
+func LessEqualsBytes(a, b []byte) bool {
+	return bytes.Compare(a, b) <= 0
 }
 
-func LessEqualsTimestamp(a, b TimestampValue) BoolValue {
-	if a.Err != nil {
-		return BoolValue{Err: a.Err}
-	}
-	if b.Err != nil {
-		return BoolValue{Err: b.Err}
-	}
-	return BoolValue{Val: a.Val.Compare(b.Val) <= 0}
+func LessEqualsTimestamp(a, b time.Time) bool {
+	return a.Compare(b) <= 0
 }
 
-func LessEqualsDuration(a, b DurationValue) BoolValue {
-	if a.Err != nil {
-		return BoolValue{Err: a.Err}
-	}
-	if b.Err != nil {
-		return BoolValue{Err: b.Err}
-	}
-	return BoolValue{Val: a.Val <= b.Val}
+func LessEqualsDuration(a, b time.Duration) bool {
+	return a <= b
 }
 
-func GreaterInt64(a, b IntValue) BoolValue {
-	if a.Err != nil {
-		return BoolValue{Err: a.Err}
-	}
-	if b.Err != nil {
-		return BoolValue{Err: b.Err}
-	}
-	return BoolValue{Val: a.Val > b.Val}
+func GreaterInt64(a, b int64) bool {
+	return a > b
 }
 
-func GreaterInt64Uint64(a IntValue, b UintValue) BoolValue {
-	if a.Err != nil {
-		return BoolValue{Err: a.Err}
-	}
-	if b.Err != nil {
-		return BoolValue{Err: b.Err}
-	}
-	return BoolValue{Val: a.Val >= 0 && uint64(a.Val) > b.Val}
+func GreaterInt64Uint64(a int64, b uint64) bool {
+	return a >= 0 && uint64(a) > b
 }
 
-func GreaterInt64Double(a IntValue, b DoubleValue) BoolValue {
-	if a.Err != nil {
-		return BoolValue{Err: a.Err}
-	}
-	if b.Err != nil {
-		return BoolValue{Err: b.Err}
-	}
-	return BoolValue{Val: float64(a.Val) > b.Val}
+func GreaterInt64Double(a int64, b float64) bool {
+	return float64(a) > b
 }
 
-func GreaterUint64(a, b UintValue) BoolValue {
-	if a.Err != nil {
-		return BoolValue{Err: a.Err}
-	}
-	if b.Err != nil {
-		return BoolValue{Err: b.Err}
-	}
-	return BoolValue{Val: a.Val > b.Val}
+func GreaterUint64(a, b uint64) bool {
+	return a > b
 }
 
-func GreaterUint64Int64(a UintValue, b IntValue) BoolValue {
-	if a.Err != nil {
-		return BoolValue{Err: a.Err}
-	}
-	if b.Err != nil {
-		return BoolValue{Err: b.Err}
-	}
-	return BoolValue{Val: b.Val < 0 || a.Val > uint64(b.Val)}
+func GreaterUint64Int64(a uint64, b int64) bool {
+	return b < 0 || a > uint64(b)
 }
 
-func GreaterUint64Double(a UintValue, b DoubleValue) BoolValue {
-	if a.Err != nil {
-		return BoolValue{Err: a.Err}
-	}
-	if b.Err != nil {
-		return BoolValue{Err: b.Err}
-	}
-	return BoolValue{Val: float64(a.Val) > b.Val}
+func GreaterUint64Double(a uint64, b float64) bool {
+	return float64(a) > b
 }
 
-func GreaterDouble(a, b DoubleValue) BoolValue {
-	if a.Err != nil {
-		return BoolValue{Err: a.Err}
-	}
-	if b.Err != nil {
-		return BoolValue{Err: b.Err}
-	}
-	return BoolValue{Val: a.Val > b.Val}
+func GreaterDouble(a, b float64) bool {
+	return a > b
 }
 
-func GreaterDoubleInt64(a DoubleValue, b IntValue) BoolValue {
-	if a.Err != nil {
-		return BoolValue{Err: a.Err}
-	}
-	if b.Err != nil {
-		return BoolValue{Err: b.Err}
-	}
-	return BoolValue{Val: a.Val > float64(b.Val)}
+func GreaterDoubleInt64(a float64, b int64) bool {
+	return a > float64(b)
 }
 
-func GreaterDoubleUint64(a DoubleValue, b UintValue) BoolValue {
-	if a.Err != nil {
-		return BoolValue{Err: a.Err}
-	}
-	if b.Err != nil {
-		return BoolValue{Err: b.Err}
-	}
-	return BoolValue{Val: a.Val > float64(b.Val)}
+func GreaterDoubleUint64(a float64, b uint64) bool {
+	return a > float64(b)
 }
 
-func GreaterBool(a, b BoolValue) BoolValue {
-	if a.Err != nil {
-		return BoolValue{Err: a.Err}
-	}
-	if b.Err != nil {
-		return BoolValue{Err: b.Err}
-	}
-	return BoolValue{Val: a.Val && !b.Val}
+func GreaterBool(a, b bool) bool {
+	return a && !b
 }
 
-func GreaterString(a, b StringValue) BoolValue {
-	if a.Err != nil {
-		return BoolValue{Err: a.Err}
-	}
-	if b.Err != nil {
-		return BoolValue{Err: b.Err}
-	}
-	return BoolValue{Val: a.Val > b.Val}
+func GreaterString(a, b string) bool {
+	return a > b
 }
 
-func GreaterBytes(a, b BytesValue) BoolValue {
-	if a.Err != nil {
-		return BoolValue{Err: a.Err}
-	}
-	if b.Err != nil {
-		return BoolValue{Err: b.Err}
-	}
-	return BoolValue{Val: bytes.Compare(a.Val, b.Val) > 0}
+func GreaterBytes(a, b []byte) bool {
+	return bytes.Compare(a, b) > 0
 }
 
-func GreaterTimestamp(a, b TimestampValue) BoolValue {
-	if a.Err != nil {
-		return BoolValue{Err: a.Err}
-	}
-	if b.Err != nil {
-		return BoolValue{Err: b.Err}
-	}
-	return BoolValue{Val: a.Val.Compare(b.Val) > 0}
+func GreaterTimestamp(a, b time.Time) bool {
+	return a.Compare(b) > 0
 }
 
-func GreaterDuration(a, b DurationValue) BoolValue {
-	if a.Err != nil {
-		return BoolValue{Err: a.Err}
-	}
-	if b.Err != nil {
-		return BoolValue{Err: b.Err}
-	}
-	return BoolValue{Val: a.Val > b.Val}
+func GreaterDuration(a, b time.Duration) bool {
+	return a > b
 }
 
-func GreaterEqualsInt64(a, b IntValue) BoolValue {
-	if a.Err != nil {
-		return BoolValue{Err: a.Err}
-	}
-	if b.Err != nil {
-		return BoolValue{Err: b.Err}
-	}
-	return BoolValue{Val: a.Val >= b.Val}
+func GreaterEqualsInt64(a, b int64) bool {
+	return a >= b
 }
 
-func GreaterEqualsInt64Uint64(a IntValue, b UintValue) BoolValue {
-	if a.Err != nil {
-		return BoolValue{Err: a.Err}
-	}
-	if b.Err != nil {
-		return BoolValue{Err: b.Err}
-	}
-	return BoolValue{Val: a.Val >= 0 && uint64(a.Val) >= b.Val}
+func GreaterEqualsInt64Uint64(a int64, b uint64) bool {
+	return a >= 0 && uint64(a) >= b
 }
 
-func GreaterEqualsInt64Double(a IntValue, b DoubleValue) BoolValue {
-	if a.Err != nil {
-		return BoolValue{Err: a.Err}
-	}
-	if b.Err != nil {
-		return BoolValue{Err: b.Err}
-	}
-	return BoolValue{Val: float64(a.Val) >= b.Val}
+func GreaterEqualsInt64Double(a int64, b float64) bool {
+	return float64(a) >= b
 }
 
-func GreaterEqualsUint64(a, b UintValue) BoolValue {
-	if a.Err != nil {
-		return BoolValue{Err: a.Err}
-	}
-	if b.Err != nil {
-		return BoolValue{Err: b.Err}
-	}
-	return BoolValue{Val: a.Val >= b.Val}
+func GreaterEqualsUint64(a, b uint64) bool {
+	return a >= b
 }
 
-func GreaterEqualsUint64Int64(a UintValue, b IntValue) BoolValue {
-	if a.Err != nil {
-		return BoolValue{Err: a.Err}
-	}
-	if b.Err != nil {
-		return BoolValue{Err: b.Err}
-	}
-	return BoolValue{Val: b.Val < 0 || a.Val >= uint64(b.Val)}
+func GreaterEqualsUint64Int64(a uint64, b int64) bool {
+	return b < 0 || a >= uint64(b)
 }
 
-func GreaterEqualsUint64Double(a UintValue, b DoubleValue) BoolValue {
-	if a.Err != nil {
-		return BoolValue{Err: a.Err}
-	}
-	if b.Err != nil {
-		return BoolValue{Err: b.Err}
-	}
-	return BoolValue{Val: float64(a.Val) >= b.Val}
+func GreaterEqualsUint64Double(a uint64, b float64) bool {
+	return float64(a) >= b
 }
 
-func GreaterEqualsDouble(a, b DoubleValue) BoolValue {
-	if a.Err != nil {
-		return BoolValue{Err: a.Err}
-	}
-	if b.Err != nil {
-		return BoolValue{Err: b.Err}
-	}
-	return BoolValue{Val: a.Val >= b.Val}
+func GreaterEqualsDouble(a, b float64) bool {
+	return a >= b
 }
 
-func GreaterEqualsDoubleInt64(a DoubleValue, b IntValue) BoolValue {
-	if a.Err != nil {
-		return BoolValue{Err: a.Err}
-	}
-	if b.Err != nil {
-		return BoolValue{Err: b.Err}
-	}
-	return BoolValue{Val: a.Val >= float64(b.Val)}
+func GreaterEqualsDoubleInt64(a float64, b int64) bool {
+	return a >= float64(b)
 }
 
-func GreaterEqualsDoubleUint64(a DoubleValue, b UintValue) BoolValue {
-	if a.Err != nil {
-		return BoolValue{Err: a.Err}
-	}
-	if b.Err != nil {
-		return BoolValue{Err: b.Err}
-	}
-	return BoolValue{Val: a.Val >= float64(b.Val)}
+func GreaterEqualsDoubleUint64(a float64, b uint64) bool {
+	return a >= float64(b)
 }
 
-func GreaterEqualsBool(a, b BoolValue) BoolValue {
-	if a.Err != nil {
-		return BoolValue{Err: a.Err}
-	}
-	if b.Err != nil {
-		return BoolValue{Err: b.Err}
-	}
-	return BoolValue{Val: a.Val || !b.Val}
+func GreaterEqualsBool(a, b bool) bool {
+	return a || !b
 }
 
-func GreaterEqualsString(a, b StringValue) BoolValue {
-	if a.Err != nil {
-		return BoolValue{Err: a.Err}
-	}
-	if b.Err != nil {
-		return BoolValue{Err: b.Err}
-	}
-	return BoolValue{Val: a.Val >= b.Val}
+func GreaterEqualsString(a, b string) bool {
+	return a >= b
 }
 
-func GreaterEqualsBytes(a, b BytesValue) BoolValue {
-	if a.Err != nil {
-		return BoolValue{Err: a.Err}
-	}
-	if b.Err != nil {
-		return BoolValue{Err: b.Err}
-	}
-	return BoolValue{Val: bytes.Compare(a.Val, b.Val) >= 0}
+func GreaterEqualsBytes(a, b []byte) bool {
+	return bytes.Compare(a, b) >= 0
 }
 
-func GreaterEqualsTimestamp(a, b TimestampValue) BoolValue {
-	if a.Err != nil {
-		return BoolValue{Err: a.Err}
-	}
-	if b.Err != nil {
-		return BoolValue{Err: b.Err}
-	}
-	return BoolValue{Val: a.Val.Compare(b.Val) >= 0}
+func GreaterEqualsTimestamp(a, b time.Time) bool {
+	return a.Compare(b) >= 0
 }
 
-func GreaterEqualsDuration(a, b DurationValue) BoolValue {
-	if a.Err != nil {
-		return BoolValue{Err: a.Err}
-	}
-	if b.Err != nil {
-		return BoolValue{Err: b.Err}
-	}
-	return BoolValue{Val: a.Val >= b.Val}
+func GreaterEqualsDuration(a, b time.Duration) bool {
+	return a >= b
 }
 
-func AddInt64(a, b IntValue) IntValue {
-	if a.Err != nil {
-		return a
-	}
-	if b.Err != nil {
-		return b
-	}
-	return IntValue{Val: a.Val + b.Val}
+func AddInt64(a, b int64) int64 {
+	return a + b
 }
 
-func AddUint64(a, b UintValue) UintValue {
-	if a.Err != nil {
-		return a
-	}
-	if b.Err != nil {
-		return b
-	}
-	return UintValue{Val: a.Val + b.Val}
+func AddUint64(a, b uint64) uint64 {
+	return a + b
 }
 
-func AddDouble(a, b DoubleValue) DoubleValue {
-	if a.Err != nil {
-		return a
-	}
-	if b.Err != nil {
-		return b
-	}
-	return DoubleValue{Val: a.Val + b.Val}
+func AddDouble(a, b float64) float64 {
+	return a + b
 }
 
-func AddString(a, b StringValue) StringValue {
-	if a.Err != nil {
-		return a
-	}
-	if b.Err != nil {
-		return b
-	}
-	return StringValue{Val: a.Val + b.Val}
+func AddString(a, b string) string {
+	return a + b
 }
 
-func AddBytes(a, b BytesValue) BytesValue {
-	if a.Err != nil {
-		return a
-	}
-	if b.Err != nil {
-		return b
-	}
-	return BytesValue{Val: append(a.Val, b.Val...)}
+func AddBytes(a, b []byte) []byte {
+	return append(a, b...)
 }
 
-func AddList[T any](a, b ListValue[T]) ListValue[T] {
-	if a.Err != nil {
-		return a
-	}
-	if b.Err != nil {
-		return b
-	}
-	return ListValue[T]{Val: append(a.Val, b.Val...)}
+func AddList[T any](a, b []T) []T {
+	return append(a, b...)
 }
 
-func AddTimestampDuration(a TimestampValue, b DurationValue) TimestampValue {
-	if a.Err != nil {
-		return a
-	}
-	if b.Err != nil {
-		return TimestampValue{Err: b.Err}
-	}
-	return TimestampValue{Val: a.Val.Add(b.Val)}
+func AddTimestampDuration(a time.Time, b time.Duration) time.Time {
+	return a.Add(b)
 }
 
-func AddDurationDuration(a DurationValue, b DurationValue) DurationValue {
-	if a.Err != nil {
-		return a
-	}
-	if b.Err != nil {
-		return b
-	}
-	return DurationValue{Val: a.Val + b.Val}
+func AddDurationDuration(a time.Duration, b time.Duration) time.Duration {
+	return a + b
 }
 
-func SubtractInt64(a, b IntValue) IntValue {
-	if a.Err != nil {
-		return a
-	}
-	if b.Err != nil {
-		return b
-	}
-	return IntValue{Val: a.Val - b.Val}
+func SubtractInt64(a, b int64) int64 {
+	return a - b
 }
 
-func SubtractUint64(a, b UintValue) UintValue {
-	if a.Err != nil {
-		return a
-	}
-	if b.Err != nil {
-		return b
-	}
-	return UintValue{Val: a.Val - b.Val}
+func SubtractUint64(a, b uint64) uint64 {
+	return a - b
 }
 
-func SubtractDouble(a, b DoubleValue) DoubleValue {
-	if a.Err != nil {
-		return a
-	}
-	if b.Err != nil {
-		return b
-	}
-	return DoubleValue{Val: a.Val - b.Val}
+func SubtractDouble(a, b float64) float64 {
+	return a - b
 }
 
-func SubtractTimestampTimestamp(a TimestampValue, b TimestampValue) DurationValue {
-	if a.Err != nil {
-		return DurationValue{Err: a.Err}
-	}
-	if b.Err != nil {
-		return DurationValue{Err: b.Err}
-	}
-	return DurationValue{Val: a.Val.Sub(b.Val)}
+func SubtractTimestampTimestamp(a time.Time, b time.Time) time.Duration {
+	return a.Sub(b)
 }
 
-func SubtractTimestampDuration(a TimestampValue, b DurationValue) TimestampValue {
-	if a.Err != nil {
-		return a
-	}
-	if b.Err != nil {
-		return TimestampValue{Err: b.Err}
-	}
-	return TimestampValue{Val: a.Val.Add(-b.Val)}
+func SubtractTimestampDuration(a time.Time, b time.Duration) time.Time {
+	return a.Add(-b)
 }
 
-func SubtractDurationDuration(a DurationValue, b DurationValue) DurationValue {
-	if a.Err != nil {
-		return a
-	}
-	if b.Err != nil {
-		return b
-	}
-	return DurationValue{Val: a.Val - b.Val}
+func SubtractDurationDuration(a time.Duration, b time.Duration) time.Duration {
+	return a - b
 }
 
-func MultiplyInt64(a, b IntValue) IntValue {
-	if a.Err != nil {
-		return a
-	}
-	if b.Err != nil {
-		return b
-	}
-	return IntValue{Val: a.Val * b.Val}
+func MultiplyInt64(a, b int64) int64 {
+	return a * b
 }
 
-func MultiplyUint64(a, b UintValue) UintValue {
-	if a.Err != nil {
-		return a
-	}
-	if b.Err != nil {
-		return b
-	}
-	return UintValue{Val: a.Val * b.Val}
+func MultiplyUint64(a, b uint64) uint64 {
+	return a * b
 }
 
-func MultiplyDouble(a, b DoubleValue) DoubleValue {
-	if a.Err != nil {
-		return a
-	}
-	if b.Err != nil {
-		return b
-	}
-	return DoubleValue{Val: a.Val * b.Val}
+func MultiplyDouble(a, b float64) float64 {
+	return a * b
 }
 
-func DivideInt64(a, b IntValue) IntValue {
-	if a.Err != nil {
-		return a
-	}
-	if b.Err != nil {
-		return b
+func DivideInt64(a, b int64) (int64, error) {
+	if b == 0 {
+		return 0, errors.New("divide by 0")
 	}
-	if b.Val == 0 {
-		return IntValue{Err: errors.New("divide by 0")}
-	}
-	return IntValue{Val: a.Val / b.Val}
+	return a / b, nil
 }
 
-func DivideUint64(a, b UintValue) UintValue {
-	if a.Err != nil {
-		return a
-	}
-	if b.Err != nil {
-		return b
-	}
-	if b.Val == 0 {
-		return UintValue{Err: errors.New("divide by 0")}
+func DivideUint64(a, b uint64) (uint64, error) {
+	if b == 0 {
+		return 0, errors.New("divide by 0")
 	}
-	return UintValue{Val: a.Val / b.Val}
+	return a / b, nil
 }
 
-func DivideDouble(a, b DoubleValue) DoubleValue {
-	if a.Err != nil {
-		return a
-	}
-	if b.Err != nil {
-		return b
-	}
-	return DoubleValue{Val: a.Val / b.Val}
+func DivideDouble(a, b float64) float64 {
+	return a / b
 }
 
-func ModuloInt64(a, b IntValue) IntValue {
-	if a.Err != nil {
-		return a
+func ModuloInt64(a, b int64) (int64, error) {
+	if b == 0 {
+		return 0, errors.New("divide by 0")
 	}
-	if b.Err != nil {
-		return b
-	}
-	if b.Val == 0 {
-		return IntValue{Err: errors.New("divide by 0")}
-	}
-	return IntValue{Val: a.Val % b.Val}
+	return a % b, nil
 }
 
-func ModuloUint64(a, b UintValue) UintValue {
-	if a.Err != nil {
-		return a
-	}
-	if b.Err != nil {
-		return b
+func ModuloUint64(a, b uint64) (uint64, error) {
+	if b == 0 {
+		return 0, errors.New("divide by 0")
 	}
-	if b.Val == 0 {
-		return UintValue{Err: errors.New("divide by 0")}
-	}
-	return UintValue{Val: a.Val % b.Val}
+	return a % b, nil
 }
 
-func NegateInt64(a IntValue) IntValue {
-	if a.Err != nil {
-		return a
-	}
-	return IntValue{Val: -a.Val}
+func NegateInt64(a int64) int64 {
+	return -a
 }
 
-func NegateDouble(a DoubleValue) DoubleValue {
-	if a.Err != nil {
-		return a
-	}
-	return DoubleValue{Val: -a.Val}
+func NegateDouble(a float64) float64 {
+	return -a
 }
-
-func IndexList[Val ~struct{Val T; Err error}, T any](a ListValue[T], b IntValue) Val {
-	if a.Err != nil {
-		return Val{Err: a.Err}
-	}
-	if b.Err != nil {
-		return Val{Err: b.Err}
-	}
 
+func IndexList[T any](a []T, b int64) (T, error) {
 	// Check bounds.
-	if b.Val < 0 || b.Val >= int64(len(a.Val)) {
-		return Val{Err: fmt.Errorf("index %d out of range", b.Val)}
+	if b < 0 || b >= int64(len(a)) {
+		var zeroT T
+		return zeroT, fmt.Errorf("index %d out of range", b)
 	}
 
-	return Val{Val: a.Val[b.Val]}
+	return a[b], nil
 }
 
-func IndexMap[Val ~struct{Val V; Err error}, K comparable, V any, KVal ~struct{Val K; Err error}](a MapValue[K, V], b KVal) Val {
-	bStruct := (struct{Val K; Err error})(b)
-	if a.Err != nil {
-		return Val{Err: a.Err}
-	}
-	if bStruct.Err != nil {
-		return Val{Err: bStruct.Err}
-	}
-
-	elem, ok := a.Val[bStruct.Val]
+func IndexMap[K comparable, V any](a map[K]V, b K) (V, error) {
+	elem, ok := a[b]
 	if ok {
-		return Val{Val: elem}
+		return elem, nil
 	}
 
 	// Handle numeric equality for int and uint types as map keys.
-	switch b := any(bStruct.Val).(type) {
+	switch b := any(b).(type) {
 	case int64:
 		if b >= 0 {
-			switch a := any(a.Val).(type) {
+			switch a := any(a).(type) {
 			case map[any]V:
 				if elem, ok := a[uint64(b)]; ok {
-					return Val{Val: elem}
+					return elem, nil
 				}
 			}
 		}
 	case uint64:
 		if b <= math.MaxInt64 {
-			switch a := any(a.Val).(type) {
+			switch a := any(a).(type) {
 			case map[any]V:
 				if elem, ok := a[int64(b)]; ok {
-					return Val{Val: elem}
+					return elem, nil
 				}
 			}
 		}
 	}
 
-	return Val{Err: fmt.Errorf("no such key %v", bStruct.Val)}
+	var zeroV V
+	return zeroV, fmt.Errorf("no such key %v", b)
 }
 
-func InList[T any, U any, Val ~struct{Val U; Err error}](a Val, b ListValue[T]) BoolValue {
-	aStruct := (struct{Val U; Err error})(a)
-	if aStruct.Err != nil {
-		return BoolValue{Err: aStruct.Err}
-	}
-	if b.Err != nil {
-		return BoolValue{Err: b.Err}
-	}
-	for _, elem := range b.Val {
-		if Eq(elem, aStruct.Val) {
-			return BoolValue{Val: true}
+func InList[T any, U any](a T, b []T) bool {
+	for _, elem := range b {
+		if Equals(elem, a) {
+			return true
 		}
 	}
-	return BoolValue{Val: false}
+	return false
 }
 
-func InMap[K comparable, V any, KVal ~struct{Val K; Err error}](a KVal, b MapValue[K, V]) BoolValue {
-	aStruct := (struct{Val K; Err error})(a)
-	if aStruct.Err != nil {
-		return BoolValue{Err: aStruct.Err}
-	}
-	if b.Err != nil {
-		return BoolValue{Err: b.Err}
-	}
-	if _, ok := b.Val[aStruct.Val]; ok {
-		return BoolValue{Val: true}
+func InMap[K comparable, V any](a K, b map[K]V) bool {
+	if _, ok := b[a]; ok {
+		return true
 	}
 
 	// Handle numeric equality for int and uint types as map keys.
-	switch a := any(aStruct.Val).(type) {
+	switch a := any(a).(type) {
 	case int64:
 		if a >= 0 {
-			switch b := any(b.Val).(type) {
+			switch b := any(b).(type) {
 			case map[any]V:
 				if _, ok := b[uint64(a)]; ok {
-					return BoolValue{Val: true}
+					return true
 				}
 			}
 		}
 	case uint64:
 		if a <= math.MaxInt64 {
-			switch b := any(b.Val).(type) {
+			switch b := any(b).(type) {
 			case map[any]V:
 				if _, ok := b[int64(a)]; ok {
-					return BoolValue{Val: true}
+					return true
 				}
 			}
 		}
 	}
 
-	return BoolValue{Val: false}
+	return false
 }

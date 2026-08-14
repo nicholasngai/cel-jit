@@ -3,183 +3,31 @@ package runtime
 import (
 	"fmt"
 	"reflect"
-	"time"
 )
 
-// Value represents a value.
-type Value[T any] struct {
-	Val T
-	Err error
-}
-
-// DynValue represents a dynamically typed runtime value.
-type DynValue Value[any]
-
-func (v DynValue) DynValue() DynValue {
-	return v
-}
-
-func (v DynValue) IntValue() IntValue {
-	if v.Err != nil {
-		return IntValue{Err: v.Err}
-	}
-
-	intVal, ok := v.Val.(int64)
-	if !ok {
-		return IntValue{Err: fmt.Errorf("%v is not an int", v.Val)}
-	}
-
-	return IntValue{Val: intVal}
-}
-
-func (v DynValue) UintValue() UintValue {
-	if v.Err != nil {
-		return UintValue{Err: v.Err}
-	}
-
-	uintVal, ok := v.Val.(uint64)
-	if !ok {
-		return UintValue{Err: fmt.Errorf("%v is not a uint", v.Val)}
-	}
-
-	return UintValue{Val: uintVal}
-}
-
-func (v DynValue) DoubleValue() DoubleValue {
-	if v.Err != nil {
-		return DoubleValue{Err: v.Err}
-	}
-
-	doubleVal, ok := v.Val.(float64)
-	if !ok {
-		return DoubleValue{Err: fmt.Errorf("%v is not a double", v.Val)}
-	}
-
-	return DoubleValue{Val: doubleVal}
-}
-
-func (v DynValue) BoolValue() BoolValue {
-	if v.Err != nil {
-		return BoolValue{Err: v.Err}
-	}
-
-	boolVal, ok := v.Val.(bool)
-	if !ok {
-		return BoolValue{Err: fmt.Errorf("%v is not a bool", v.Val)}
-	}
-
-	return BoolValue{Val: boolVal}
-}
-
-func (v DynValue) StringValue() StringValue {
-	if v.Err != nil {
-		return StringValue{Err: v.Err}
-	}
-
-	stringVal, ok := v.Val.(string)
-	if !ok {
-		return StringValue{Err: fmt.Errorf("%v is not a string", v.Val)}
-	}
-
-	return StringValue{Val: stringVal}
-}
-
-func (v DynValue) BytesValue() BytesValue {
-	if v.Err != nil {
-		return BytesValue{Err: v.Err}
-	}
-
-	bytesVal, ok := v.Val.([]byte)
-	if !ok {
-		return BytesValue{Err: fmt.Errorf("%v is not a bytes", v.Val)}
-	}
-
-	return BytesValue{Val: bytesVal}
-}
-
-func (v DynValue) TimestampValue() TimestampValue {
-	if v.Err != nil {
-		return TimestampValue{Err: v.Err}
-	}
-
-	timestampVal, ok := v.Val.(time.Time)
-	if !ok {
-		return TimestampValue{Err: fmt.Errorf("%v is not a timestamp", v.Val)}
-	}
-
-	return TimestampValue{Val: timestampVal}
-}
-
-func (v DynValue) DurationValue() DurationValue {
-	if v.Err != nil {
-		return DurationValue{Err: v.Err}
-	}
-
-	durationVal, ok := v.Val.(time.Duration)
-	if !ok {
-		return DurationValue{Err: fmt.Errorf("%v is not a duration", v.Val)}
-	}
-
-	return DurationValue{Val: durationVal}
-}
-
-func (v DynValue) NullValue() NullValue {
-	if v.Err != nil {
-		return NullValue{Err: v.Err}
-	}
-
-	if v.Val != struct{}{} {
-		return NullValue{Err: fmt.Errorf("%v is not null", v.Val)}
-	}
-
-	return NullValue{}
-}
-
-func ToListValue[T any, Val DynValue | ListValue[T]](v Val) ListValue[T] {
+func ToListValue[T any](v any) ([]T, error) {
 	switch v := any(v).(type) {
-	case ListValue[T]:
-		return v
-	case DynValue:
-		if v.Err != nil {
-			return ListValue[T]{Err: v.Err}
-		}
-
-		if vList, ok := v.Val.([]T); ok {
-			return ListValue[T]{Val: vList}
-		}
-
-		listVal, err := toSlice(reflect.ValueOf(v.Val), reflect.TypeFor[T]())
-		if err != nil {
-			return ListValue[T]{Err: err}
-		}
-
-		return ListValue[T]{Val: listVal.Interface().([]T)}
+	case []T:
+		return v, nil
 	default:
-		panic("unreachable")
+		listVal, err := toSlice(reflect.ValueOf(v), reflect.TypeFor[T]())
+		if err != nil {
+			return nil, err
+		}
+		return listVal.Interface().([]T), nil
 	}
 }
 
-func ToMapValue[K comparable, V any, Val DynValue | MapValue[K, V]](v Val) MapValue[K, V] {
+func ToMapValue[K comparable, V any](v any) (map[K]V, error) {
 	switch v := any(v).(type) {
-	case MapValue[K, V]:
-		return v
-	case DynValue:
-		if v.Err != nil {
-			return MapValue[K, V]{Err: v.Err}
-		}
-
-		if vMap, ok := v.Val.(map[K]V); ok {
-			return MapValue[K, V]{Val: vMap}
-		}
-
-		listVal, err := toMap(reflect.ValueOf(v.Val), reflect.TypeFor[K](), reflect.TypeFor[V]())
-		if err != nil {
-			return MapValue[K, V]{Err: err}
-		}
-
-		return MapValue[K, V]{Val: listVal.Interface().(map[K]V)}
+	case map[K]V:
+		return v, nil
 	default:
-		panic("unreachable")
+		mapVal, err := toMap(reflect.ValueOf(v), reflect.TypeFor[K](), reflect.TypeFor[V]())
+		if err != nil {
+			return nil, err
+		}
+		return mapVal.Interface().(map[K]V), nil
 	}
 }
 
@@ -265,150 +113,4 @@ func toMap(v reflect.Value, keyType reflect.Type, valueType reflect.Type) (refle
 	}
 
 	return result, nil
-}
-
-// IntValue represents a statically typed int value.
-type IntValue Value[int64]
-
-func (v IntValue) DynValue() DynValue {
-	if v.Err != nil {
-		return DynValue{Err: v.Err}
-	}
-	return DynValue{Val: v.Val}
-}
-
-func (v IntValue) IntValue() IntValue {
-	return v
-}
-
-// UintValue represents a statically typed uint value.
-type UintValue Value[uint64]
-
-func (v UintValue) DynValue() DynValue {
-	if v.Err != nil {
-		return DynValue{Err: v.Err}
-	}
-	return DynValue{Val: v.Val}
-}
-
-func (v UintValue) UintValue() UintValue {
-	return v
-}
-
-// DoubleValue represents a statically typed double value.
-type DoubleValue Value[float64]
-
-func (v DoubleValue) DynValue() DynValue {
-	if v.Err != nil {
-		return DynValue{Err: v.Err}
-	}
-	return DynValue{Val: v.Val}
-}
-
-func (v DoubleValue) DoubleValue() DoubleValue {
-	return v
-}
-
-// BoolValue represents a statically typed bool value.
-type BoolValue Value[bool]
-
-func (v BoolValue) DynValue() DynValue {
-	if v.Err != nil {
-		return DynValue{Err: v.Err}
-	}
-	return DynValue{Val: v.Val}
-}
-
-func (v BoolValue) BoolValue() BoolValue {
-	return v
-}
-
-// StringValue represents a statically typed string value.
-type StringValue Value[string]
-
-func (v StringValue) DynValue() DynValue {
-	if v.Err != nil {
-		return DynValue{Err: v.Err}
-	}
-	return DynValue{Val: v.Val}
-}
-
-func (v StringValue) StringValue() StringValue {
-	return v
-}
-
-// BytesValue represents a statically typed bytes value.
-type BytesValue Value[[]byte]
-
-func (v BytesValue) DynValue() DynValue {
-	if v.Err != nil {
-		return DynValue{Err: v.Err}
-	}
-	return DynValue{Val: v.Val}
-}
-
-func (v BytesValue) BytesValue() BytesValue {
-	return v
-}
-
-// TimestampValue represents a statically typed timestamp value.
-type TimestampValue Value[time.Time]
-
-func (v TimestampValue) DynValue() DynValue {
-	if v.Err != nil {
-		return DynValue{Err: v.Err}
-	}
-	return DynValue{Val: v.Val}
-}
-
-func (v TimestampValue) TimestampValue() TimestampValue {
-	return v
-}
-
-// DurationValue represents a statically typed duration value.
-type DurationValue Value[time.Duration]
-
-func (v DurationValue) DynValue() DynValue {
-	if v.Err != nil {
-		return DynValue{Err: v.Err}
-	}
-	return DynValue{Val: v.Val}
-}
-
-func (v DurationValue) DurationValue() DurationValue {
-	return v
-}
-
-// NullValue represents a statically typed null value.
-type NullValue Value[struct{}]
-
-func (v NullValue) DynValue() DynValue {
-	if v.Err != nil {
-		return DynValue{Err: v.Err}
-	}
-	return DynValue{Val: v.Val}
-}
-
-func (v NullValue) NullValue() NullValue {
-	return v
-}
-
-// ListValue represents a statically typed list value.
-type ListValue[T any] Value[[]T]
-
-func (v ListValue[T]) DynValue() DynValue {
-	if v.Err != nil {
-		return DynValue{Err: v.Err}
-	}
-	return DynValue{Val: v.Val}
-}
-
-// ListValue represents a statically typed map value.
-type MapValue[K comparable, V any] Value[map[K]V]
-
-func (v MapValue[K, V]) DynValue() DynValue {
-	if v.Err != nil {
-		return DynValue{Err: v.Err}
-	}
-	return DynValue{Val: v.Val}
 }

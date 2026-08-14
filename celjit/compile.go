@@ -35,10 +35,9 @@ type Parameter struct {
 }
 
 type runtimeTypeInfo struct {
-	goType      string
-	runtimeType string
-	converter   func(string) string
-	equaler     func(string, string) string
+	goType    string
+	converter func(*astWriter, io.Writer, string) string
+	equaler   func(string, string) string
 }
 
 // celTypeInfo maps CEL types to their JIT runtime types.
@@ -50,10 +49,9 @@ func celTypeInfo(t *cel.Type) (runtimeTypeInfo, error) {
 			return runtimeTypeInfo{}, fmt.Errorf("list[0]: %w", err)
 		}
 		return runtimeTypeInfo{
-			goType:      fmt.Sprintf("[]%s", elemTypeInfo.goType),
-			runtimeType: fmt.Sprintf("runtime.ListValue[%s]", elemTypeInfo.goType),
-			converter: func(s string) string {
-				return fmt.Sprintf("runtime.ToListValue[%s](%s)", elemTypeInfo.goType, s)
+			goType: fmt.Sprintf("[]%s", elemTypeInfo.goType),
+			converter: func(aw *astWriter, w io.Writer, s string) string {
+				return aw.handleErr(w, fmt.Sprintf("runtime.ToListValue[%s](%s)", elemTypeInfo.goType, s))
 			},
 			equaler: func(a, b string) string {
 				return fmt.Sprintf("slices.EqualFunc(%s, %s, func(a, b %s) bool { return %s })", a, b, elemTypeInfo.goType, elemTypeInfo.equaler("a", "b"))
@@ -69,10 +67,9 @@ func celTypeInfo(t *cel.Type) (runtimeTypeInfo, error) {
 			return runtimeTypeInfo{}, fmt.Errorf("map[1]: %w", err)
 		}
 		return runtimeTypeInfo{
-			goType:      fmt.Sprintf("map[%s]%s", keyTypeInfo.goType, valTypeInfo.goType),
-			runtimeType: fmt.Sprintf("runtime.MapValue[%s, %s]", keyTypeInfo.goType, valTypeInfo.goType),
-			converter: func(s string) string {
-				return fmt.Sprintf("runtime.ToMapValue[%s, %s](%s)", keyTypeInfo.goType, valTypeInfo.goType, s)
+			goType: fmt.Sprintf("map[%s]%s", keyTypeInfo.goType, valTypeInfo.goType),
+			converter: func(aw *astWriter, w io.Writer, s string) string {
+				return aw.handleErr(w, fmt.Sprintf("runtime.ToMapValue[%s, %s](%s)", keyTypeInfo.goType, valTypeInfo.goType, s))
 			},
 			equaler: func(a, b string) string {
 				return fmt.Sprintf("maps.EqualFunc(%s, %s, func(a, b %s) bool { return %s })", a, b, valTypeInfo.goType, valTypeInfo.equaler("a", "b"))
@@ -83,73 +80,63 @@ func celTypeInfo(t *cel.Type) (runtimeTypeInfo, error) {
 	switch t {
 	case cel.DynType:
 		return runtimeTypeInfo{
-			goType:      "any",
-			runtimeType: "runtime.DynValue",
-			converter:   func(s string) string { return fmt.Sprintf("%s.DynValue()", s) },
-			equaler:     func(a, b string) string { return fmt.Sprintf("runtime.Eq(%s, %s)", a, b) },
+			goType:    "any",
+			converter: func(aw *astWriter, w io.Writer, s string) string { return fmt.Sprintf("%s.DynValue()", s) },
+			equaler:   func(a, b string) string { return fmt.Sprintf("runtime.Eq(%s, %s)", a, b) },
 		}, nil
 	case cel.IntType:
 		return runtimeTypeInfo{
-			goType:      "int64",
-			runtimeType: "runtime.IntValue",
-			converter:   func(s string) string { return fmt.Sprintf("%s.IntValue()", s) },
-			equaler:     func(a, b string) string { return fmt.Sprintf("(%s == %s)", a, b) },
+			goType:    "int64",
+			converter: func(aw *astWriter, w io.Writer, s string) string { return fmt.Sprintf("%s.IntValue()", s) },
+			equaler:   func(a, b string) string { return fmt.Sprintf("(%s == %s)", a, b) },
 		}, nil
 	case cel.UintType:
 		return runtimeTypeInfo{
-			goType:      "uint64",
-			runtimeType: "runtime.UintValue",
-			converter:   func(s string) string { return fmt.Sprintf("%s.UintValue()", s) },
-			equaler:     func(a, b string) string { return fmt.Sprintf("(%s == %s)", a, b) },
+			goType:    "uint64",
+			converter: func(aw *astWriter, w io.Writer, s string) string { return fmt.Sprintf("%s.UintValue()", s) },
+			equaler:   func(a, b string) string { return fmt.Sprintf("(%s == %s)", a, b) },
 		}, nil
 	case cel.DoubleType:
 		return runtimeTypeInfo{
-			goType:      "float64",
-			runtimeType: "runtime.DoubleValue",
-			converter:   func(s string) string { return fmt.Sprintf("%s.DoubleValue()", s) },
-			equaler:     func(a, b string) string { return fmt.Sprintf("(%s == %s)", a, b) },
+			goType:    "float64",
+			converter: func(aw *astWriter, w io.Writer, s string) string { return fmt.Sprintf("%s.DoubleValue()", s) },
+			equaler:   func(a, b string) string { return fmt.Sprintf("(%s == %s)", a, b) },
 		}, nil
 	case cel.BoolType:
 		return runtimeTypeInfo{
-			goType:      "bool",
-			runtimeType: "runtime.BoolValue",
-			converter:   func(s string) string { return fmt.Sprintf("%s.BoolValue()", s) },
-			equaler:     func(a, b string) string { return fmt.Sprintf("(%s == %s)", a, b) },
+			goType:    "bool",
+			converter: func(aw *astWriter, w io.Writer, s string) string { return fmt.Sprintf("%s.BoolValue()", s) },
+			equaler:   func(a, b string) string { return fmt.Sprintf("(%s == %s)", a, b) },
 		}, nil
 	case cel.StringType:
 		return runtimeTypeInfo{
-			goType:      "string",
-			runtimeType: "runtime.StringValue",
-			converter:   func(s string) string { return fmt.Sprintf("%s.StringValue()", s) },
-			equaler:     func(a, b string) string { return fmt.Sprintf("(%s == %s)", a, b) },
+			goType:    "string",
+			converter: func(aw *astWriter, w io.Writer, s string) string { return fmt.Sprintf("%s.StringValue()", s) },
+			equaler:   func(a, b string) string { return fmt.Sprintf("(%s == %s)", a, b) },
 		}, nil
 	case cel.BytesType:
 		return runtimeTypeInfo{
-			goType:      "[]byte",
-			runtimeType: "runtime.BytesValue",
-			converter:   func(s string) string { return fmt.Sprintf("%s.BytesValue()", s) },
-			equaler:     func(a, b string) string { return fmt.Sprintf("slices.Equal(%s, %s)", a, b) },
+			goType:    "[]byte",
+			converter: func(aw *astWriter, w io.Writer, s string) string { return fmt.Sprintf("%s.BytesValue()", s) },
+			equaler:   func(a, b string) string { return fmt.Sprintf("slices.Equal(%s, %s)", a, b) },
 		}, nil
 	case cel.TimestampType:
 		return runtimeTypeInfo{
-			goType:      "time.Time",
-			runtimeType: "runtime.TimestampValue",
-			converter:   func(s string) string { return fmt.Sprintf("%s.TimestampValue()", s) },
-			equaler:     func(a, b string) string { return fmt.Sprintf("%s.Equal(%s)", a, b) },
+			goType:    "time.Time",
+			converter: func(aw *astWriter, w io.Writer, s string) string { return fmt.Sprintf("%s.TimestampValue()", s) },
+			equaler:   func(a, b string) string { return fmt.Sprintf("%s.Equal(%s)", a, b) },
 		}, nil
 	case cel.DurationType:
 		return runtimeTypeInfo{
-			goType:      "time.Duration",
-			runtimeType: "runtime.DurationValue",
-			converter:   func(s string) string { return fmt.Sprintf("%s.DurationValue()", s) },
-			equaler:     func(a, b string) string { return fmt.Sprintf("(%s == %s))", a, b) },
+			goType:    "time.Duration",
+			converter: func(aw *astWriter, w io.Writer, s string) string { return fmt.Sprintf("%s.DurationValue()", s) },
+			equaler:   func(a, b string) string { return fmt.Sprintf("(%s == %s))", a, b) },
 		}, nil
 	case cel.NullType:
 		return runtimeTypeInfo{
-			goType:      "struct{}",
-			runtimeType: "runtime.NullValue",
-			converter:   func(s string) string { return fmt.Sprintf("%s.NullValue()", s) },
-			equaler:     func(a, b string) string { return "true" },
+			goType:    "struct{}",
+			converter: func(aw *astWriter, w io.Writer, s string) string { return fmt.Sprintf("%s.NullValue()", s) },
+			equaler:   func(a, b string) string { return "true" },
 		}, nil
 	default:
 		return runtimeTypeInfo{}, fmt.Errorf("unhandled type %v", t)
@@ -242,6 +229,7 @@ import (
 )
 
 var (
+	_ = runtime.Equals
 	_ = fmt.Print
 	_ = maps.Equal[map[int]int, map[int]int]
 	_ = reflect.ValueOf
@@ -307,12 +295,6 @@ var (
 			return nil, fmt.Errorf("%q: CEL checked expr to AST: %w", exprConfig.Expr, err)
 		}
 
-		// Make Go source.
-		goSource, err := e.astToGoSource(astExpr.GetExpr(), astExpr)
-		if err != nil {
-			return nil, fmt.Errorf("%q: generate Go source: %w", exprConfig.Expr, err)
-		}
-
 		// Get runtime types.
 		type runtimeParameter struct {
 			parameter Parameter
@@ -334,31 +316,37 @@ var (
 			return nil, fmt.Errorf("%q: return type: %w", exprConfig.Expr, err)
 		}
 
-		// Write the program.
+		// Write program prologue.
 		if _, err := fmt.Fprintf(program,
 			`
 func Program%d(%s) (%s, error) {
-	val := program%[1]d(%[4]s)
-	return val.Val, val.Err
-}
+	var zero %s
+	_ = zero
 
-func program%[1]d(%[5]s) %s {
-	return %s
-}
 `,
 			i,
 			repeat("%s %s", runtimeParameters, func(r runtimeParameter) []any {
 				return []any{mangleParameter(r.parameter.Name), r.typeInfo.goType}
 			}),
 			returnTypeInfo.goType,
-			repeat("%s{Val: %s}", runtimeParameters, func(r runtimeParameter) []any {
-				return []any{r.typeInfo.runtimeType, mangleParameter(r.parameter.Name)}
-			}),
-			repeat("%s %s", runtimeParameters, func(r runtimeParameter) []any {
-				return []any{mangleVariable(r.parameter.Name), r.typeInfo.runtimeType}
-			}),
-			returnTypeInfo.runtimeType,
-			returnTypeInfo.converter(goSource),
+			returnTypeInfo.goType,
+		); err != nil {
+			return nil, err
+		}
+
+		// Make Go source.
+		goSource, err := (&astWriter{env: e}).writeGoSourceForAst(program, astExpr.GetExpr(), astExpr)
+		if err != nil {
+			return nil, fmt.Errorf("%q: generate Go source: %w", exprConfig.Expr, err)
+		}
+
+		// Write epilogue.
+		if _, err := fmt.Fprintf(program,
+			`
+	return %s, nil
+}
+`,
+			goSource,
 		); err != nil {
 			return nil, err
 		}
