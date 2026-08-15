@@ -5,15 +5,13 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/nicholasngai/cel-jit/runtime"
 )
 
 var (
-	// The source runtime directory that this binary was compiled with, if found.
-	goPathRuntimeDir string
-
 	// The source runtime directory that we wrote to a temporary directory.
 	stdRuntimeDir      string
 	stdRuntimeRefCount int
@@ -21,10 +19,14 @@ var (
 )
 
 func getStdRuntimeDir() (string, error) {
+	// Look for GOPATH directory first. Check for the module path prefix
+	// followed by @ to detect -trimpath binaries.
+	if runtimeSource, ok := runtime.ModuleSourceDirectory(); ok && !strings.HasPrefix(runtimeSource, "github.com/nicholasngai/cel-jit/runtime@") {
+		return runtimeSource, nil
+	}
+
 	stdRuntimeMu.Lock()
 	defer stdRuntimeMu.Unlock()
-
-	// TODO(nngai) Look for GOPATH directory first.
 
 	// If GOPATH dir couldn't be found, look for one that we wrote already.
 	if stdRuntimeDir != "" {
