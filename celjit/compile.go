@@ -361,7 +361,7 @@ var (
 
 			`,
 			i,
-			repeat("%s %s", runtimeParameters, func(r runtimeParameter) []any {
+			repeat("%s %s", runtimeParameters, func(i int, r runtimeParameter) []any {
 				return []any{mangleVariable(r.parameter.Name), r.typeInfo.goType}
 			}),
 			returnTypeInfo.goType,
@@ -429,23 +429,32 @@ var (
 			return nil, fmt.Errorf("load program.so: %w", err)
 		}
 
+		// Assign custom functions.
+		for _, function := range e.functions {
+			if !function.isCustom {
+				continue
+			}
+
+			for _, overload := range function.overloads {
+				if !overload.isCustom {
+					continue
+				}
+
+				// FIXME(nngai) Oops, I cannot lookup the runtime package's symbols like this.
+				//setter, err := plug.Lookup(overload.setterName)
+				//if err != nil {
+				//	return nil, fmt.Errorf("lookup %q: %w", overload.setterName, err)
+				//}
+				//reflect.ValueOf(setter).Call([]reflect.Value{reflect.ValueOf(overload.config.Implementation)})
+			}
+		}
+
 		return plug, nil
 	})
 	pluginFuncAny, _ := e.pluginsByHash.LoadOrStore(programHash, pluginFunc)
 	pluginFunc = pluginFuncAny.(func() (*plugin.Plugin, error))
 
 	return pluginFunc()
-}
-
-func repeat[T any](format string, vals []T, mapper func(T) []any) string {
-	var builder strings.Builder
-	for i, val := range vals {
-		if i > 0 {
-			builder.WriteString(", ")
-		}
-		fmt.Fprintf(&builder, format, mapper(val)...)
-	}
-	return builder.String()
 }
 
 func writeFilef(path string, format string, args ...any) error {

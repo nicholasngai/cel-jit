@@ -58,3 +58,25 @@ func freindentfLevel(w io.Writer, level int, format string, a ...any) (int, erro
 
 	return fmt.Fprintf(w, newFormat, a...)
 }
+
+func repeat[T any](format string, vals []T, mapper func(int, T) []any) string {
+	var builder strings.Builder
+	for i, val := range vals {
+		if i > 0 {
+			builder.WriteString(", ")
+		}
+		fmt.Fprintf(&builder, format, mapper(i, val)...)
+	}
+	return builder.String()
+}
+
+func repeatInt(format string, n int, mapper func(int) []any) string {
+	var builder strings.Builder
+	for i := range n {
+		if i > 0 {
+			builder.WriteString(", ")
+		}
+		fmt.Fprintf(&builder, format, mapper(i)...)
+	}
+	return builder.String()
+}

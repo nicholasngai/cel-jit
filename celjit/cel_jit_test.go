@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/google/cel-go/cel"
+	"github.com/google/cel-go/common/types"
+	"github.com/google/cel-go/common/types/ref"
 )
 
 var tests = []struct {
@@ -191,6 +193,7 @@ var tests = []struct {
 	{"Dyn", "dyn(1)", nil, nil, nil, cel.DynType},
 	{"Variable", "x + 1", []string{"x"}, []*cel.Type{cel.IntType}, []any{int64(1)}, cel.IntType},
 	{"VariableWithDot", "x.y + 1", []string{"x.y"}, []*cel.Type{cel.IntType}, []any{int64(1)}, cel.IntType},
+	{"CustomFunction", "x.addOne()", []string{"x"}, []*cel.Type{cel.IntType}, []any{int64(1)}, cel.IntType},
 }
 
 func TestConformance(t *testing.T) {
@@ -208,10 +211,15 @@ func TestConformance(t *testing.T) {
 			t.Parallel()
 
 			// CEL.
-			envOpts := make([]cel.EnvOption, 0, len(test.paramNames)+2)
+			envOpts := make([]cel.EnvOption, 0, len(test.paramNames)+3)
 			envOpts = append(envOpts,
 				cel.EagerlyValidateDeclarations(true),
 				cel.ExtendedValidations(),
+				cel.Function("addOne",
+					cel.MemberOverload("int_add_one", []*cel.Type{cel.IntType}, cel.IntType, cel.UnaryBinding(func(a ref.Val) ref.Val {
+						return types.Int(a.Value().(int64) + 1)
+					})),
+				),
 			)
 			for j, paramName := range test.paramNames {
 				envOpts = append(envOpts, cel.Variable(paramName, test.paramTypes[j]))
@@ -289,10 +297,15 @@ func TestConformance(t *testing.T) {
 func BenchmarkCEL(b *testing.B) {
 	for _, test := range tests {
 		b.Run(test.name, func(b *testing.B) {
-			envOpts := make([]cel.EnvOption, 0, len(test.paramNames)+2)
+			envOpts := make([]cel.EnvOption, 0, len(test.paramNames)+3)
 			envOpts = append(envOpts,
 				cel.EagerlyValidateDeclarations(true),
 				cel.ExtendedValidations(),
+				cel.Function("addOne",
+					cel.MemberOverload("int_add_one", []*cel.Type{cel.IntType}, cel.IntType, cel.UnaryBinding(func(a ref.Val) ref.Val {
+						return types.Int(a.Value().(int64) + 1)
+					})),
+				),
 			)
 			for _, paramName := range test.paramNames {
 				envOpts = append(envOpts, cel.Variable(paramName, cel.DynType))
@@ -418,7 +431,20 @@ func compileJITTests(tb testing.TB) ([]any, error) {
 	tb.Helper()
 
 	// Make env.
-	env, err := NewEnv(EnvConfig{})
+	env, err := NewEnv(EnvConfig{
+		Functions: map[string]Function{
+			"addOne": {
+				Overloads: map[string]FunctionOverload{
+					"int_add_one": {
+						IsMemberOverload: true,
+						ParameterTypes:   []*cel.Type{cel.IntType},
+						ReturnType:       cel.IntType,
+						Implementation:   func(a int64) int64 { return a + 1 },
+					},
+				},
+			},
+		},
+	})
 	if err != nil {
 		return nil, fmt.Errorf("new env: %w", err)
 	}

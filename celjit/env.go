@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"sync"
 
 	"github.com/google/cel-go/cel"
@@ -78,18 +79,45 @@ type Env struct {
 type envFunction struct {
 	dynRuntimeName string // The name used for the dynamic variant at runtime.
 	maxArguments   int    // The maximum # of arguments to the function in its overloads.
+	isCustom       bool
 	overloads      map[string]envFunctionOverload
 }
 
 type envFunctionOverload struct {
-	runtimeName      string
-	isMemberOverload bool
-	parameterTypes   []*cel.Type
-	returnType       *cel.Type
+	config       FunctionOverload
+	runtimeName  string
+	setterName   string
+	returnsError bool
+	isCustom     bool
 }
 
 func NewEnv(config EnvConfig) (*Env, error) {
-	runtimeDir, err := writeRuntime()
+	// Make functions.
+	customFunctions := makeStandardEnv()
+	for funcID, funcConfig := range config.Functions {
+		function := customFunctions[funcID]
+
+		if function.overloads == nil {
+			function.overloads = make(map[string]envFunctionOverload)
+		}
+		function.dynRuntimeName = fmt.Sprintf("runtime.Func_%s", funcID)
+		function.isCustom = true
+
+		for overloadID, overloadConfig := range funcConfig.Overloads {
+			function.overloads[overloadID] = envFunctionOverload{
+				config:       overloadConfig,
+				runtimeName:  fmt.Sprintf("runtime.FuncOverload_%s", overloadID),
+				setterName:   fmt.Sprintf("SetFuncOverload_%s", overloadID),
+				returnsError: reflect.ValueOf(overloadConfig.Implementation).Type().NumOut() > 1,
+				isCustom:     true,
+			}
+			function.maxArguments = max(function.maxArguments, len(overloadConfig.ParameterTypes))
+		}
+
+		customFunctions[funcID] = function
+	}
+
+	runtimeDir, err := writeRuntime(customFunctions)
 	if err != nil {
 		return nil, fmt.Errorf("write runtime: %w", err)
 	}
@@ -98,11 +126,11 @@ func NewEnv(config EnvConfig) (*Env, error) {
 		config: config,
 
 		runtimeDir: runtimeDir,
-		functions:  makeStandardEnv(), // TODO(nngai) Use custom overloads.
+		functions:  customFunctions,
 	}, nil
 }
 
-func writeRuntime() (_ string, retErr error) {
+func writeRuntime(functions map[string]envFunction) (_ string, retErr error) {
 	// Make runtime dir.
 	dir, err := os.MkdirTemp("", "cel-jit-runtime-source-*")
 	if err != nil {
@@ -148,7 +176,161 @@ go 1.26.0
 		return "", err
 	}
 
+	// Write custom functions.
+	if err := writeCustomFunctions(dir, functions); err != nil {
+		return "", fmt.Errorf("custom functions: %w", err)
+	}
+
 	return dir, nil
+}
+
+func writeCustomFunctions(dir string, functions map[string]envFunction) (retErr error) {
+	if len(functions) == 0 {
+		return nil
+	}
+
+	// Create file.
+	file, err := os.Create(filepath.Join(dir, "runtime", "custom_functions.go"))
+	if err != nil {
+		return fmt.Errorf("create: %w", err)
+	}
+	defer func() {
+		if err := file.Close(); err != nil && retErr == nil {
+			retErr = err
+		}
+	}()
+
+	// Write header.
+	if _, err := freindentfLevel(file, 0, `
+		package runtime
+
+		import (
+			"fmt"
+			"reflect"
+		)
+		`,
+	); err != nil {
+		return err
+	}
+
+	for funcID, function := range functions {
+		if !function.isCustom {
+			continue
+		}
+
+		for overloadID, overload := range function.overloads {
+			if !overload.isCustom {
+				continue
+			}
+
+			// Get runtime type info.
+			paramTypeInfos := make([]runtimeTypeInfo, 0, len(overload.config.ParameterTypes))
+			for i, paramType := range overload.config.ParameterTypes {
+				paramTypeInfo, err := celTypeInfo(paramType)
+				if err != nil {
+					return fmt.Errorf("function %q: overload %q: parameter %d type: %w", funcID, overloadID, i, err)
+				}
+				paramTypeInfos = append(paramTypeInfos, paramTypeInfo)
+			}
+			returnTypeInfo, err := celTypeInfo(overload.config.ReturnType)
+			if err != nil {
+				return fmt.Errorf("function %q: overload %q: return type: %w", funcID, overloadID, err)
+			}
+
+			// Check if there is an error in the return type.
+			var returnExpr string
+			if overload.returnsError {
+				returnExpr = fmt.Sprintf("(%s, error)", returnTypeInfo.goType)
+			} else {
+				returnExpr = returnTypeInfo.goType
+			}
+
+			// TODO(nngai) Sanitize names.
+			if _, err := freindentfLevel(file, 0, `
+
+				var %s func(%s) %s
+
+				func %s(f func(%s) %s) {
+					%[1]s = f
+				}
+				`,
+				strings.TrimPrefix(overload.runtimeName, "runtime."),
+				repeat("%s", paramTypeInfos, func(i int, t runtimeTypeInfo) []any { return []any{t.goType} }),
+				returnExpr,
+				overload.setterName,
+				repeat("%s", paramTypeInfos, func(i int, t runtimeTypeInfo) []any { return []any{t.goType} }),
+				returnExpr,
+			); err != nil {
+				return err
+			}
+		}
+
+		// TODO(nngai) Sanitize names.
+		if _, err := freindentfLevel(file, 0, `
+
+			func %s(%s) (any, error) {
+				switch [...]reflect.Type{%s} {
+			`,
+			strings.TrimPrefix(function.dynRuntimeName, "runtime."),
+			repeatInt("arg%d any", function.maxArguments, func(i int) []any { return []any{i} }),
+			repeatInt("reflect.TypeOf(arg%d)", function.maxArguments, func(i int) []any { return []any{i} }),
+		); err != nil {
+			return err
+		}
+		for overloadID, overload := range function.overloads {
+			paramTypeInfos := make([]runtimeTypeInfo, 0, len(overload.config.ParameterTypes))
+			for i, paramType := range overload.config.ParameterTypes {
+				paramTypeInfo, err := celTypeInfo(paramType)
+				if err != nil {
+					return fmt.Errorf("function %q: overload %q: param %d type info: %w", funcID, overloadID, i, err)
+				}
+				paramTypeInfos = append(paramTypeInfos, paramTypeInfo)
+			}
+
+			if _, err := freindentfLevel(file, 1, `
+				case [...]reflect.Type{%s}:
+				`,
+				repeat("reflect.TypeFor[%s]()", paramTypeInfos, func(i int, paramTypeInfo runtimeTypeInfo) []any { return []any{paramTypeInfo.goType} }),
+			); err != nil {
+				return err
+			}
+
+			if overload.returnsError {
+				if _, err := freindentfLevel(file, 2, `
+					ret, err := %s(%s)
+					return ret, err
+					`,
+					strings.TrimPrefix(overload.runtimeName, "runtime."),
+					repeat("arg%d.(%s)", paramTypeInfos, func(i int, paramTypeInfo runtimeTypeInfo) []any { return []any{i, paramTypeInfo.goType} }),
+				); err != nil {
+					return err
+				}
+			} else {
+				if _, err := freindentfLevel(file, 2, `
+					ret := %s(%s)
+					return ret, nil
+					`,
+					strings.TrimPrefix(overload.runtimeName, "runtime."),
+					repeat("arg%d.(%s)", paramTypeInfos, func(i int, paramTypeInfo runtimeTypeInfo) []any { return []any{i, paramTypeInfo.goType} }),
+				); err != nil {
+					return err
+				}
+			}
+		}
+		if _, err := freindentfLevel(file, 0, `
+				default:
+					return nil, fmt.Errorf("unsupported type(s) %s", %s)
+				}
+			}
+			`,
+			repeatInt("%%T", function.maxArguments, func(i int) []any { return nil }),
+			repeatInt("arg%d", function.maxArguments, func(i int) []any { return []any{i} }),
+		); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // writeType performs a DFS on the given type and writes any type definitions
