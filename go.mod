@@ -5,6 +5,7 @@ go 1.25.0
 require (
 	github.com/google/cel-go v0.30.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20260729162451-8efbd57d26e0
+	github.com/nicholasngai/cel-jit/runtime v0.0.0-00010101000000-000000000000
 )
 
 require (
@@ -15,3 +16,5 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260727163830-6c54dddc4772 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 )
+
+replace github.com/nicholasngai/cel-jit/runtime => ./runtime

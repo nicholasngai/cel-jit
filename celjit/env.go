@@ -3,7 +3,6 @@ package celjit
 import (
 	"fmt"
 	"io"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -11,7 +10,6 @@ import (
 	"sync"
 
 	"github.com/google/cel-go/cel"
-	"github.com/nicholasngai/cel-jit/runtime"
 )
 
 // EnvConfig configures the construction of an [Env].
@@ -63,8 +61,9 @@ type FunctionOverload struct {
 type Env struct {
 	config EnvConfig
 
-	runtimeDir string
-	functions  map[string]envFunction
+	stdRuntimeDir    string
+	customRuntimeDir string
+	functions        map[string]envFunction
 
 	// Plugin loading in Go takes up memory for the lifetime of the process so
 	// we can't unload these, but we still want to dedupe programs with the same
@@ -77,7 +76,7 @@ type Env struct {
 }
 
 type envFunction struct {
-	dynRuntimeName string // The name used for the dynamic variant at runtime.
+	dynRuntimeName string // The name used for the dynamic variant at custom.
 	maxArguments   int    // The maximum # of arguments to the function in its overloads.
 	isCustom       bool
 	overloads      map[string]envFunctionOverload
@@ -91,22 +90,22 @@ type envFunctionOverload struct {
 	isCustom     bool
 }
 
-func NewEnv(config EnvConfig) (*Env, error) {
+func NewEnv(config EnvConfig) (_ *Env, retErr error) {
 	// Make functions.
-	customFunctions := makeStandardEnv()
+	functions := makeStandardEnv()
 	for funcID, funcConfig := range config.Functions {
-		function := customFunctions[funcID]
+		function := functions[funcID]
 
 		if function.overloads == nil {
 			function.overloads = make(map[string]envFunctionOverload)
 		}
-		function.dynRuntimeName = fmt.Sprintf("runtime.Func_%s", funcID)
+		function.dynRuntimeName = fmt.Sprintf("custom.Func_%s", funcID)
 		function.isCustom = true
 
 		for overloadID, overloadConfig := range funcConfig.Overloads {
 			function.overloads[overloadID] = envFunctionOverload{
 				config:       overloadConfig,
-				runtimeName:  fmt.Sprintf("runtime.FuncOverload_%s", overloadID),
+				runtimeName:  fmt.Sprintf("custom.FuncOverload_%s", overloadID),
 				setterName:   fmt.Sprintf("SetFuncOverload_%s", overloadID),
 				returnsError: reflect.ValueOf(overloadConfig.Implementation).Type().NumOut() > 1,
 				isCustom:     true,
@@ -114,25 +113,55 @@ func NewEnv(config EnvConfig) (*Env, error) {
 			function.maxArguments = max(function.maxArguments, len(overloadConfig.ParameterTypes))
 		}
 
-		customFunctions[funcID] = function
+		functions[funcID] = function
 	}
 
-	runtimeDir, err := writeRuntime(customFunctions)
+	stdRuntimeDir, err := getStdRuntimeDir()
 	if err != nil {
-		return nil, fmt.Errorf("write runtime: %w", err)
+		return nil, fmt.Errorf("write standard runtime: %w", err)
+	}
+	defer func() {
+		if retErr != nil {
+			closeStdRuntime()
+		}
+	}()
+
+	customRuntimeDir, err := writeCustomRuntime(stdRuntimeDir, functions)
+	if err != nil {
+		return nil, fmt.Errorf("write custom runtime: %w", err)
 	}
 
 	return &Env{
 		config: config,
 
-		runtimeDir: runtimeDir,
-		functions:  customFunctions,
+		stdRuntimeDir:    stdRuntimeDir,
+		customRuntimeDir: customRuntimeDir,
+		functions:        functions,
 	}, nil
 }
 
-func writeRuntime(functions map[string]envFunction) (_ string, retErr error) {
+func writeCustomRuntime(stdRuntimeDir string, functions map[string]envFunction) (_ string, retErr error) {
+	// Skip if there are no custom functions.
+	hasCustomFunction := false
+outer:
+	for _, function := range functions {
+		if function.isCustom {
+			hasCustomFunction = true
+			break
+		}
+		for _, overload := range function.overloads {
+			if overload.isCustom {
+				hasCustomFunction = true
+				break outer
+			}
+		}
+	}
+	if !hasCustomFunction {
+		return "", nil
+	}
+
 	// Make runtime dir.
-	dir, err := os.MkdirTemp("", "cel-jit-runtime-source-*")
+	dir, err := os.MkdirTemp("", "cel-jit-custom-runtime-source-*")
 	if err != nil {
 		return "", fmt.Errorf("mkdir temp: %w", err)
 	}
@@ -146,34 +175,20 @@ func writeRuntime(functions map[string]envFunction) (_ string, retErr error) {
 	if err := writeFilef(filepath.Join(dir, "go.mod"),
 		`module github.com/nicholasngai/cel-jit/%s
 
-go 1.26.0
+go 1.25.0
+
+require github.com/nicholasngai/cel-jit/runtime v0.0.0-00010101000000-000000000000
+
+replace github.com/nicholasngai/cel-jit/runtime => %s
 `,
 		filepath.Base(dir),
+		stdRuntimeDir,
 	); err != nil {
 		return "", err
 	}
 
-	// Write the runtime to it.
-	if err := fs.WalkDir(runtime.Source, ".", func(runtimePath string, dirEntry fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if dirEntry.IsDir() {
-			if err := os.Mkdir(filepath.Join(dir, "runtime", runtimePath), 0o755); err != nil {
-				return fmt.Errorf("mkdir %s: %w", filepath.Join(dir, "runtime", runtimePath), err)
-			}
-		} else {
-			contents, err := runtime.Source.ReadFile(runtimePath)
-			if err != nil {
-				return fmt.Errorf("read embedded %s: %w", runtimePath, err)
-			}
-			if err := writeFilef(filepath.Join(dir, "runtime", runtimePath), "%s", string(contents)); err != nil {
-				return err
-			}
-		}
-		return nil
-	}); err != nil {
-		return "", err
+	if err := os.Mkdir(filepath.Join(dir, "custom"), 0o755); err != nil {
+		return "", fmt.Errorf("mkdir custom: %w", err)
 	}
 
 	// Write custom functions.
@@ -190,7 +205,7 @@ func writeCustomFunctions(dir string, functions map[string]envFunction) (retErr 
 	}
 
 	// Create file.
-	file, err := os.Create(filepath.Join(dir, "runtime", "custom_functions.go"))
+	file, err := os.Create(filepath.Join(dir, "custom", "functions.go"))
 	if err != nil {
 		return fmt.Errorf("create: %w", err)
 	}
@@ -202,12 +217,14 @@ func writeCustomFunctions(dir string, functions map[string]envFunction) (retErr 
 
 	// Write header.
 	if _, err := freindentfLevel(file, 0, `
-		package runtime
+		package custom
 
 		import (
 			"fmt"
 			"reflect"
 		)
+
+		func Dummy() {}
 		`,
 	); err != nil {
 		return err
@@ -254,7 +271,7 @@ func writeCustomFunctions(dir string, functions map[string]envFunction) (retErr 
 					%[1]s = f
 				}
 				`,
-				strings.TrimPrefix(overload.runtimeName, "runtime."),
+				strings.TrimPrefix(overload.runtimeName, "custom."),
 				repeat("%s", paramTypeInfos, func(i int, t runtimeTypeInfo) []any { return []any{t.goType} }),
 				returnExpr,
 				overload.setterName,
@@ -271,7 +288,7 @@ func writeCustomFunctions(dir string, functions map[string]envFunction) (retErr 
 			func %s(%s) (any, error) {
 				switch [...]reflect.Type{%s} {
 			`,
-			strings.TrimPrefix(function.dynRuntimeName, "runtime."),
+			strings.TrimPrefix(function.dynRuntimeName, "custom."),
 			repeatInt("arg%d any", function.maxArguments, func(i int) []any { return []any{i} }),
 			repeatInt("reflect.TypeOf(arg%d)", function.maxArguments, func(i int) []any { return []any{i} }),
 		); err != nil {
@@ -300,7 +317,7 @@ func writeCustomFunctions(dir string, functions map[string]envFunction) (retErr 
 					ret, err := %s(%s)
 					return ret, err
 					`,
-					strings.TrimPrefix(overload.runtimeName, "runtime."),
+					strings.TrimPrefix(overload.runtimeName, "custom."),
 					repeat("arg%d.(%s)", paramTypeInfos, func(i int, paramTypeInfo runtimeTypeInfo) []any { return []any{i, paramTypeInfo.goType} }),
 				); err != nil {
 					return err
@@ -310,7 +327,7 @@ func writeCustomFunctions(dir string, functions map[string]envFunction) (retErr 
 					ret := %s(%s)
 					return ret, nil
 					`,
-					strings.TrimPrefix(overload.runtimeName, "runtime."),
+					strings.TrimPrefix(overload.runtimeName, "custom."),
 					repeat("arg%d.(%s)", paramTypeInfos, func(i int, paramTypeInfo runtimeTypeInfo) []any { return []any{i, paramTypeInfo.goType} }),
 				); err != nil {
 					return err
@@ -443,8 +460,11 @@ func writeType(f io.Writer, t reflect.Type, visited map[reflect.Type]string, nex
 
 // Cleanup removes all filesystem artifacts generated by the environment.
 func (e *Env) Cleanup() error {
-	if err := os.RemoveAll(e.runtimeDir); err != nil {
-		return err
+	if e.customRuntimeDir != "" {
+		if err := os.RemoveAll(e.customRuntimeDir); err != nil {
+			return err
+		}
 	}
+	closeStdRuntime()
 	return nil
 }

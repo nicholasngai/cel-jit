@@ -224,18 +224,27 @@ func (e *Env) compilePlugin(config CompileConfig) (*plugin.Plugin, error) {
 	defer os.RemoveAll(tempDir)
 
 	// Write Go module file.
+	var customRuntimeRequireLine, customRuntimeReplaceLine string
+	if e.customRuntimeDir != "" {
+		customRuntimeRequireLine = fmt.Sprintf("github.com/nicholasngai/cel-jit/%s v0.0.0-00010101000000-000000000000", filepath.Base(e.customRuntimeDir))
+		customRuntimeReplaceLine = fmt.Sprintf("replace github.com/nicholasngai/cel-jit/%s => %s", filepath.Base(e.customRuntimeDir), e.customRuntimeDir)
+	}
 	if err := writeFilef(filepath.Join(tempDir, "go.mod"),
 		`module github.com/nicholasngai/cel-jit/compiled
 
-go 1.26.0
+go 1.25.0
 
-require github.com/nicholasngai/cel-jit/%s v0.0.0-00000000000000-000000000000
+require (
+	github.com/nicholasngai/cel-jit/runtime v0.0.0-00010101000000-000000000000
+	%s
+)
 
-replace github.com/nicholasngai/cel-jit/%s => %s
+replace github.com/nicholasngai/cel-jit/runtime => %s
+%s
 `,
-		filepath.Base(e.runtimeDir),
-		filepath.Base(e.runtimeDir),
-		e.runtimeDir,
+		customRuntimeRequireLine,
+		e.stdRuntimeDir,
+		customRuntimeReplaceLine,
 	); err != nil {
 		return nil, err
 	}
@@ -250,6 +259,11 @@ replace github.com/nicholasngai/cel-jit/%s => %s
 	program := io.MultiWriter(programHasher, programFile)
 
 	// Write header.
+	var customRuntimeImportLine, customRuntimeDummyLine string
+	if e.customRuntimeDir != "" {
+		customRuntimeImportLine = fmt.Sprintf("\"github.com/nicholasngai/cel-jit/%s/custom\"", filepath.Base(e.customRuntimeDir))
+		customRuntimeDummyLine = "_ = custom.Dummy"
+	}
 	if _, err := fmt.Fprintf(program,
 		`package main
 
@@ -260,11 +274,13 @@ import (
 	"slices"
 	"time"
 
-	"github.com/nicholasngai/cel-jit/%s/runtime"
+	"github.com/nicholasngai/cel-jit/runtime"
+	%s
 )
 
 var (
 	_ = runtime.Equals
+	%s
 	_ = fmt.Print
 	_ = maps.Equal[map[int]int, map[int]int]
 	_ = reflect.ValueOf
@@ -272,7 +288,8 @@ var (
 	_ = time.Parse
 )
 `,
-		filepath.Base(e.runtimeDir),
+		customRuntimeImportLine,
+		customRuntimeDummyLine,
 	); err != nil {
 		return nil, fmt.Errorf("write program.go: %w", err)
 	}
