@@ -559,8 +559,8 @@ func Index(a, b any) (any, error) {
 	return nil, fmt.Errorf("incompatible types %T and %T", a, b)
 }
 
-func NotStrictlyFalse(a bool) (bool, error) {
-	return a, nil
+func NotStrictlyFalse(a bool) bool {
+	return a
 }
 
 func In(a, b any) (any, error) {

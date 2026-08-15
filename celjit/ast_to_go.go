@@ -81,7 +81,7 @@ func (aw *astWriter) writeGoSourceForAst(w io.Writer, node *expr.Expr, checkedEx
 				return "", fmt.Errorf("list elem %d: %w", i, err)
 			}
 
-			builder.WriteString(elemSource)
+			builder.WriteString(elemTypeInfo.converter(aw, w, elemSource))
 		}
 		builder.WriteString("}")
 
@@ -127,7 +127,7 @@ func (aw *astWriter) writeGoSourceForAst(w io.Writer, node *expr.Expr, checkedEx
 					return "", fmt.Errorf("map value %d: %w", i, err)
 				}
 
-				fmt.Fprintf(&builder, "%s: %s", keySource, valSource)
+				fmt.Fprintf(&builder, "%s: %s", keyTypeInfo.converter(aw, w, keySource), valTypeInfo.converter(aw, w, valSource))
 			}
 			builder.WriteString("}")
 
@@ -179,6 +179,19 @@ func (aw *astWriter) writeGoSourceForAst(w io.Writer, node *expr.Expr, checkedEx
 			}
 		}
 	case *expr.Expr_ComprehensionExpr:
+		resExprType, ok := checkedExpr.GetTypeMap()[node.GetId()]
+		if !ok {
+			return "", fmt.Errorf("no type info for node %d", node.GetId())
+		}
+		resType, err := cel.ExprTypeToType(resExprType)
+		if err != nil {
+			return "", fmt.Errorf("expr type %v to CEL type", resExprType)
+		}
+		resTypeInfo, err := celTypeInfo(resType)
+		if err != nil {
+			return "", fmt.Errorf("result type %v to runtime types: %w", resType, err)
+		}
+
 		rangeGo, err := aw.writeGoSourceForAst(w, exprKind.ComprehensionExpr.GetIterRange(), checkedExpr)
 		if err != nil {
 			return "", fmt.Errorf("range: %w", err)
@@ -202,51 +215,59 @@ func (aw *astWriter) writeGoSourceForAst(w io.Writer, node *expr.Expr, checkedEx
 			return "", fmt.Errorf("loop condition: %w", err)
 		}
 		loopCondStmt := b.String()
-
-		// TODO(nngai) Comprehension type overloads.
-
-		fmt.Fprintf(w, `
-			v%[1]dVal := reflect.ValueOf(%s)
-			v%[1]dAccu := %[3]s
-			switch v%[1]dVal.Type().Kind() {
-			case reflect.Slice:
-				for i := range collectionVal.Len() {
-					%[4]s := collectionVal.Index(i).Interface()
-
-					%s
-					if %s != true {
-						break
-					}
-
-					%s
-					%[3]s = %[8]s
-				}
-			case reflect.Map:
-				mapIter := collectionVal.MapRange()
-				for mapIter.Next() {
-					%[4]s := mapIter.Key().Interface()
-
-					%s
-					if %s != true {
-						break
-					}
-
-					%s
-					%[3]s = %[8]s
-				}
-			default:
-				return zero, fmt.Errorf("unsupported comprehension type %%T", collectionVal)
-			}
-			`,
-			aw.valIdx, rangeGo, accumulatorInitGo, mangleVariable(exprKind.ComprehensionExpr.GetIterVar()), loopCondStmt, loopCondGo, loopStepStmt, loopStepGo,
-		)
-
-		resultGo, err := aw.writeGoSourceForAst(w, exprKind.ComprehensionExpr.GetResult(), checkedExpr)
+		b.Reset()
+		resultGo, err := aw.writeGoSourceForAst(&b, exprKind.ComprehensionExpr.GetResult(), checkedExpr)
 		if err != nil {
 			return "", fmt.Errorf("result: %w", err)
 		}
+		resultStmt := b.String()
 
-		return resultGo, nil
+		// TODO(nngai) Comprehension type overloads.
+
+		freindentf(w, `
+			var v%d %s
+			{
+				v%[1]dVal := reflect.ValueOf(%[3]s)
+				%s := %s
+				switch v%[1]dVal.Type().Kind() {
+				case reflect.Slice:
+					for i := range v%[1]dVal.Len() {
+						%[6]s := v%[1]dVal.Index(i).Interface()
+
+						%[7]s
+						if %s != true {
+							break
+						}
+
+						%s
+						%[4]s = %[10]s
+					}
+				case reflect.Map:
+					mapIter := v%[1]dVal.MapRange()
+					for mapIter.Next() {
+						%[6]s := mapIter.Key().Interface()
+
+						%s
+						if %s != true {
+							break
+						}
+
+						%s
+						%[4]s = %[10]s
+					}
+				default:
+					return zero, fmt.Errorf("unsupported comprehension type %%T", %[3]s)
+				}
+
+				%[11]s
+				v%[1]d = %[12]s
+			}
+			`,
+			aw.valIdx, resTypeInfo.goType, rangeGo, mangleVariable(exprKind.ComprehensionExpr.GetAccuVar()), accumulatorInitGo, mangleVariable(exprKind.ComprehensionExpr.GetIterVar()), loopCondStmt, loopCondGo, loopStepStmt, loopStepGo, resultStmt, resultGo,
+		)
+		ret := fmt.Sprintf("v%d", aw.valIdx)
+		aw.valIdx += 1
+		return ret, nil
 	case *expr.Expr_CallExpr:
 		// Handle logical AND, OR, and conditional first since those have lazy
 		// eval semantics.
