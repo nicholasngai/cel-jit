@@ -49,10 +49,13 @@ func closeStdRuntime() {
 	stdRuntimeMu.Lock()
 	defer stdRuntimeMu.Unlock()
 
-	if stdRuntimeRefCount == 0 {
-		if stdRuntimeDir != "" {
-			_ = os.RemoveAll(stdRuntimeDir)
-			stdRuntimeDir = ""
+	if stdRuntimeRefCount > 0 {
+		stdRuntimeRefCount -= 1
+		if stdRuntimeRefCount == 0 {
+			if stdRuntimeDir != "" {
+				_ = os.RemoveAll(stdRuntimeDir)
+				stdRuntimeDir = ""
+			}
 		}
 	}
 }
