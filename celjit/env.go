@@ -422,7 +422,8 @@ func writeType(f io.Writer, t reflect.Type, visited map[reflect.Type]string, nex
 		*nextStructIdx += 1
 
 		// Write all dependent types out first.
-		for field := range t.Fields() {
+		for i := range t.NumField() {
+			field := t.Field(i)
 			if err := writeType(f, field.Type, visited, nextStructIdx); err != nil {
 				return err
 			}
@@ -434,7 +435,8 @@ func writeType(f io.Writer, t reflect.Type, visited map[reflect.Type]string, nex
 		}
 
 		// Write fields.
-		for field := range t.Fields() {
+		for i := range t.NumField() {
+			field := t.Field(i)
 			if field.Anonymous {
 				if _, err := fmt.Fprintf(f, "\t%s\n", visited[field.Type]); err != nil {
 					return err
