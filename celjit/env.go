@@ -10,6 +10,8 @@ import (
 	"sync"
 
 	"github.com/google/cel-go/cel"
+
+	"github.com/nicholasngai/cel-jit/runtime"
 )
 
 // EnvConfig configures the construction of an [Env].
@@ -85,7 +87,6 @@ type envFunction struct {
 type envFunctionOverload struct {
 	config       FunctionOverload
 	runtimeName  string
-	setterName   string
 	returnsError bool
 	isCustom     bool
 }
@@ -106,7 +107,6 @@ func NewEnv(config EnvConfig) (_ *Env, retErr error) {
 			function.overloads[overloadID] = envFunctionOverload{
 				config:       overloadConfig,
 				runtimeName:  fmt.Sprintf("custom.FuncOverload_%s", overloadID),
-				setterName:   fmt.Sprintf("SetFuncOverload_%s", overloadID),
 				returnsError: reflect.ValueOf(overloadConfig.Implementation).Type().NumOut() > 1,
 				isCustom:     true,
 			}
@@ -222,6 +222,8 @@ func writeCustomFunctions(dir string, functions map[string]envFunction) (retErr 
 		import (
 			"fmt"
 			"reflect"
+
+			"github.com/nicholasngai/cel-jit/runtime"
 		)
 
 		func Dummy() {}
@@ -265,21 +267,18 @@ func writeCustomFunctions(dir string, functions map[string]envFunction) (retErr 
 			// TODO(nngai) Sanitize names.
 			if _, err := freindentfLevel(file, 0, `
 
-				var %s func(%s) %s
-
-				func %s(f func(%s) %s) {
-					%[1]s = f
-				}
+				var %s func(%s) %s = runtime.LoadCustomFunction(%q, %[1]q).(func(%s) %s)
 				`,
 				strings.TrimPrefix(overload.runtimeName, "custom."),
 				repeat("%s", paramTypeInfos, func(i int, t runtimeTypeInfo) []any { return []any{t.goType} }),
 				returnExpr,
-				overload.setterName,
-				repeat("%s", paramTypeInfos, func(i int, t runtimeTypeInfo) []any { return []any{t.goType} }),
-				returnExpr,
+				filepath.Base(dir),
 			); err != nil {
 				return err
 			}
+
+			// Store custom function.
+			runtime.StoreCustomFunction(filepath.Base(dir), strings.TrimPrefix(overload.runtimeName, "custom."), overload.config.Implementation)
 		}
 
 		// TODO(nngai) Sanitize names.
