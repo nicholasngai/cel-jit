@@ -1,6 +1,7 @@
 package celjit
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 	"testing"
@@ -194,6 +195,8 @@ var tests = []struct {
 	{"Variable", "x + 1", []string{"x"}, []*cel.Type{cel.IntType}, []any{int64(1)}, cel.IntType},
 	{"VariableWithDot", "x.y + 1", []string{"x.y"}, []*cel.Type{cel.IntType}, []any{int64(1)}, cel.IntType},
 	{"CustomFunction", "x.addOne()", []string{"x"}, []*cel.Type{cel.IntType}, []any{int64(1)}, cel.IntType},
+	{"CustomFunctionError", "x.addOneError(false)", []string{"x"}, []*cel.Type{cel.IntType}, []any{int64(1)}, cel.IntType},
+	{"CustomFunctionError2", "x.addOneError(true)", []string{"x"}, []*cel.Type{cel.IntType}, []any{int64(1)}, cel.IntType},
 }
 
 func TestConformance(t *testing.T) {
@@ -211,20 +214,11 @@ func TestConformance(t *testing.T) {
 			t.Parallel()
 
 			// CEL.
-			envOpts := make([]cel.EnvOption, 0, len(test.paramNames)+3)
-			envOpts = append(envOpts,
-				cel.EagerlyValidateDeclarations(true),
-				cel.ExtendedValidations(),
-				cel.Function("addOne",
-					cel.MemberOverload("int_add_one", []*cel.Type{cel.IntType}, cel.IntType, cel.UnaryBinding(func(a ref.Val) ref.Val {
-						return types.Int(a.Value().(int64) + 1)
-					})),
-				),
-			)
+			envOpts := make([]cel.EnvOption, 0, len(test.paramNames))
 			for j, paramName := range test.paramNames {
 				envOpts = append(envOpts, cel.Variable(paramName, test.paramTypes[j]))
 			}
-			env, err := cel.NewEnv(envOpts...)
+			env, err := makeCELEnv(envOpts...)
 			if err != nil {
 				t.Errorf("Failed to create CEL env: %v", err)
 				return
@@ -297,20 +291,11 @@ func TestConformance(t *testing.T) {
 func BenchmarkCEL(b *testing.B) {
 	for _, test := range tests {
 		b.Run(test.name, func(b *testing.B) {
-			envOpts := make([]cel.EnvOption, 0, len(test.paramNames)+3)
-			envOpts = append(envOpts,
-				cel.EagerlyValidateDeclarations(true),
-				cel.ExtendedValidations(),
-				cel.Function("addOne",
-					cel.MemberOverload("int_add_one", []*cel.Type{cel.IntType}, cel.IntType, cel.UnaryBinding(func(a ref.Val) ref.Val {
-						return types.Int(a.Value().(int64) + 1)
-					})),
-				),
-			)
+			envOpts := make([]cel.EnvOption, 0, len(test.paramNames))
 			for _, paramName := range test.paramNames {
 				envOpts = append(envOpts, cel.Variable(paramName, cel.DynType))
 			}
-			env, err := cel.NewEnv(envOpts...)
+			env, err := makeCELEnv(envOpts...)
 			if err != nil {
 				b.Errorf("Failed to create CEL env: %v", err)
 				return
@@ -427,6 +412,30 @@ func BenchmarkJIT(b *testing.B) {
 	}
 }
 
+func makeCELEnv(opts ...cel.EnvOption) (*cel.Env, error) {
+	envOpts := make([]cel.EnvOption, 0, len(opts)+4)
+	envOpts = append(envOpts,
+		cel.EagerlyValidateDeclarations(true),
+		cel.ExtendedValidations(),
+		cel.Function("addOne",
+			cel.MemberOverload("int_add_one", []*cel.Type{cel.IntType}, cel.IntType, cel.UnaryBinding(func(a ref.Val) ref.Val {
+				return types.Int(a.Value().(int64) + 1)
+			})),
+		),
+		cel.Function("addOneError",
+			cel.MemberOverload("int_bool_add_one_error", []*cel.Type{cel.IntType, cel.BoolType}, cel.IntType, cel.BinaryBinding(func(a, b ref.Val) ref.Val {
+				if b.Value().(bool) {
+					return types.NewErr("testing error")
+				}
+				return types.Int(a.Value().(int64) + 1)
+			})),
+		),
+	)
+	envOpts = append(envOpts, opts...)
+
+	return cel.NewEnv(envOpts...)
+}
+
 func compileJITTests(tb testing.TB) ([]any, error) {
 	tb.Helper()
 
@@ -440,6 +449,21 @@ func compileJITTests(tb testing.TB) ([]any, error) {
 						ParameterTypes:   []*cel.Type{cel.IntType},
 						ReturnType:       cel.IntType,
 						Implementation:   func(a int64) int64 { return a + 1 },
+					},
+				},
+			},
+			"addOneError": {
+				Overloads: map[string]FunctionOverload{
+					"int_bool_add_one_error": {
+						IsMemberOverload: true,
+						ParameterTypes:   []*cel.Type{cel.IntType, cel.BoolType},
+						ReturnType:       cel.IntType,
+						Implementation: func(a int64, b bool) (int64, error) {
+							if b {
+								return 0, errors.New("testing error")
+							}
+							return a + 1, nil
+						},
 					},
 				},
 			},
